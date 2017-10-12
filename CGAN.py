@@ -107,7 +107,7 @@ class CGAN(object):
         print('-----------------------------------------------')
 
         # load mnist
-        self.data_X, self.data_Y = utils.load_mnist(args.dataset)
+        self.data_X, self.data_Y = utils.load_mnist(args.dataset, args.dataroot_dir)
         self.z_dim = 62
         self.y_dim = 10
 

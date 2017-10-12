@@ -6,8 +6,8 @@ import imageio
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 
-def load_mnist(dataset):
-    data_dir = os.path.join("./data", dataset)
+def load_mnist(dataset, dataroot_dir="./data"):
+    data_dir = os.path.join(dataroot_dir, dataset)
 
     def extract_data(filename, num_data, head_size, data_size):
         with gzip.open(filename) as bytestream:
