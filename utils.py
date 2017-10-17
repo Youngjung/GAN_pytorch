@@ -3,6 +3,8 @@ import torch.nn as nn
 import numpy as np
 import scipy.misc
 import imageio
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 
