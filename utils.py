@@ -1,4 +1,5 @@
-import os, gzip, torch
+from __future__ import print_function
+import os, sys, gzip, torch, time
 import torch.nn as nn
 import numpy as np
 import scipy.misc
@@ -7,6 +8,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
+from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+
+import pdb
 
 def load_mnist(dataset, dataroot_dir="./data"):
     data_dir = os.path.join(dataroot_dir, dataset)
@@ -53,7 +58,7 @@ def load_mnist(dataset, dataroot_dir="./data"):
     y_vec = torch.from_numpy(y_vec).type(torch.FloatTensor)
     return X, y_vec
 
-def load_celebA(dir, transform, batch_size, shuffle):
+def CustomDataLoader(path, transform, batch_size, shuffle):
     # transform = transforms.Compose([
     #     transforms.CenterCrop(160),
     #     transform.Scale(64)
@@ -62,11 +67,78 @@ def load_celebA(dir, transform, batch_size, shuffle):
     # ])
 
     # data_dir = 'data/celebA'  # this path depends on your computer
-    dset = datasets.ImageFolder(dir, transform)
+    dset = datasets.ImageFolder(path, transform)
     data_loader = torch.utils.data.DataLoader(dset, batch_size, shuffle)
 
     return data_loader
 
+class MultiPie( Dataset ):
+	def __init__( self, root_dir, transform=None, cam_ids=None):
+		self.filenames = []
+		self.root_dir = root_dir
+		self.transform = transform
+
+		#cam_ids = [10, 41, 50, 51, 80, 81, 90, 110, 120, 130, 140, 190, 191, 200, 240]
+		#cam_ids = [41, 50, 51, 80, 90, 130, 140, 190, 200]
+		if cam_ids is None:
+			cam_ids = [200, 190, 41, 50, 51, 140, 130, 80, 90]
+		self.cam_map = {}
+		for i, cam in enumerate(cam_ids):
+			self.cam_map[cam] = i
+
+		print('Loading MultiPie metadata...', end='')
+		sys.stdout.flush()
+		time_start = time.time()
+
+		fname_cache = 'cache_multipie.txt'
+		if os.path.exists(fname_cache):
+			self.filenames = open(fname_cache).read().splitlines()
+			print( 'restored from {}'.format(fname_cache) )
+		else:
+			path = os.path.join( root_dir, 'Multi-Pie', 'data' )
+			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(path)
+							for f in files if f.endswith('.png') ]
+	
+			print('{:.0f}sec, {} images found.'.format( time.time()-time_start, len(self.filenames)))
+	
+			f = open(fname_cache, 'w')
+			for fname in self.filenames:
+				f.write(fname+'\n')
+			f.close()
+			print( 'cached in {}'.format(fname_cache) )
+
+		# filtering : 9 cams and 200 subjects
+		self.filenames = [ f for f in self.filenames 
+							if int(os.path.basename(f)[10:13]) in cam_ids ]
+							#if int(os.path.basename(f)[10:13]) in cam_ids and int(os.path.basename(f)[:3]) < 201 ]
+#		print('shuffling...', end='')
+#		sys.stdout.flush()
+#		time_start = time.time()
+#		seed = 547
+#		np.random.seed(seed)
+#		shuffler = np.arange( len(filenames) )
+#		np.random.shuffle(shuffler)
+#
+#		shuffler = shuffler.tolist()
+#		self.filenames = [filenames[s] for s in shuffler]
+#		print('{:.0f}sec'.format( time.time()-time_start))
+#		sys.stdout.flush()
+		
+
+	def __len__( self ):
+		return len( self.filenames )
+	
+	def __getitem__( self, idx ):
+		basename = os.path.basename( self.filenames[idx] )
+		identity, sessionNum, recordingNum, pose, illum =  basename[:-4].split('_')
+		image = Image.open( self.filenames[idx] ).convert('L')
+		pose = self.cam_map[int(pose)]
+		if self.transform:
+			image = self.transform(image)
+		labels = { 'id': int(identity),
+					'pose': pose,
+					'illum': int(illum)}
+		return image, labels 
 
 def print_network(net):
     num_params = 0

@@ -9,6 +9,7 @@ from WGAN_GP import WGAN_GP
 from infoGAN import infoGAN
 from EBGAN import EBGAN
 from BEGAN import BEGAN
+from DRGAN import DRGAN
 
 """parsing and configuration"""
 def parse_args():
@@ -16,9 +17,10 @@ def parse_args():
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument('--gan_type', type=str, default='EBGAN',
-                        choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP' 'DRAGAN', 'LSGAN'],
+                        choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN'],
                         help='The type of GAN')#, required=True)
-    parser.add_argument('--dataset', type=str, default='mnist', choices=['mnist', 'fashion-mnist', 'celebA'],
+    parser.add_argument('--dataset', type=str, default='mnist', 
+						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace'],
                         help='The name of dataset')
     parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
     parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')
@@ -93,6 +95,8 @@ def main():
         gan = LSGAN(args)
     elif args.gan_type == 'BEGAN':
         gan = BEGAN(args)
+    elif args.gan_type == 'DRGAN':
+        gan = DRGAN(args)
     else:
         raise Exception("[!] There is no option for " + args.gan_type)
 

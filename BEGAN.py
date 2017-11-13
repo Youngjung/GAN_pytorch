@@ -139,7 +139,7 @@ class BEGAN(object):
 					[transforms.ToTensor()])),
 				batch_size=self.batch_size, shuffle=True)
 		elif self.dataset == 'celebA':
-			self.data_loader = utils.load_celebA(data_dir, transform=transforms.Compose(
+			self.data_loader = utils.CustomDataLoader(data_dir, transform=transforms.Compose(
 				[transforms.CenterCrop(160), transforms.Scale(64), transforms.ToTensor()]), batch_size=self.batch_size,
 												 shuffle=True)
 		self.z_dim = 62

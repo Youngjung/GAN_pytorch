@@ -21,6 +21,12 @@ class generator(nn.Module):
 			self.input_width = 64
 			self.input_dim = 62
 			self.output_dim = 3
+		elif dataset == 'MultiPie':
+			self.input_height =96 
+			self.input_width = 96
+			self.input_dim = 62
+			self.output_dim = 1
+
 
 		self.fc = nn.Sequential(
 			nn.Linear(self.input_dim, 1024),
@@ -61,6 +67,12 @@ class discriminator(nn.Module):
 			self.input_width = 64
 			self.input_dim = 3
 			self.output_dim = 1
+		elif dataset == 'MultiPie':
+			self.input_height =96 
+			self.input_width = 96
+			self.input_dim = 1
+			self.output_dim = 1
+
 
 		self.conv = nn.Sequential(
 			nn.Conv2d(self.input_dim, 64, 4, 2, 1),
@@ -130,9 +142,17 @@ class GAN(object):
 					[transforms.ToTensor()])),
 				batch_size=self.batch_size, shuffle=True)
 		elif self.dataset == 'celebA':
-			self.data_loader = utils.load_celebA(data_dir, transform=transforms.Compose(
+			self.data_loader = utils.CustomDataLoader(data_dir, transform=transforms.Compose(
 				[transforms.CenterCrop(160), transforms.Scale(64), transforms.ToTensor()]), batch_size=self.batch_size,
 												 shuffle=True)
+		elif self.dataset == 'MultiPie' or self.dataset == 'miniPie':
+			self.data_loader = DataLoader( utils.MultiPie(data_dir,
+				transform=transforms.Compose(
+				[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()]),
+				cam_ids=[51]
+				),
+				batch_size=self.batch_size, shuffle=True) 
+
 		self.z_dim = 62
 
 		# fixed noise
