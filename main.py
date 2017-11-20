@@ -10,6 +10,7 @@ from infoGAN import infoGAN
 from EBGAN import EBGAN
 from BEGAN import BEGAN
 from DRGAN import DRGAN
+from AE import AutoEncoder
 
 """parsing and configuration"""
 def parse_args():
@@ -17,7 +18,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument('--gan_type', type=str, default='EBGAN',
-                        choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN'],
+                        choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE'],
                         help='The type of GAN')#, required=True)
     parser.add_argument('--dataset', type=str, default='mnist', 
 						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace'],
@@ -97,6 +98,8 @@ def main():
         gan = BEGAN(args)
     elif args.gan_type == 'DRGAN':
         gan = DRGAN(args)
+    elif args.gan_type == 'AE':
+        gan = AutoEncoder(args)
     else:
         raise Exception("[!] There is no option for " + args.gan_type)
 
