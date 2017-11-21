@@ -82,17 +82,21 @@ class Encoder( nn.Module ):
 			nn.AvgPool2d( 6 )
 		)
 
-		self.fc = nn.Linear( 320, Nd+1+Np+Ni )
+		self.fc_id = nn.Linear( 320, Nd+1 )
+		#self.fc_pose = nn.Linear( 320, Np )
+		#self.fc_illum = nn.Linear( 320, Ni )
 
 		utils.initialize_weights(self)
 
 	def forward(self, input):
 		x = self.conv( input )
 		if self.name == 'D':
-			x = self.fc( x.view(x.size(0),-1) )
-			fid = x[:,:self.Nd+1]
-			fpose = x[:,self.Nd+1:self.Nd+1+self.Np]
-			fillum = x[:,-self.Ni:]
+			x_flat = x.view(x.size(0),-1)
+			fid = self.fc_id( x_flat )
+			fpose = None
+			fillum = None
+			#fpose = self.fc_pose( x_flat )
+			#fillum = self.fc_illum( x_flat )
 			x = ( fid, fpose, fillum )
 		return x
 
@@ -129,7 +133,9 @@ class Decoder( nn.Module ):
 			nn.ConvTranspose2d( 64, 32, 3, 1, 1 ), 
 			nn.ConvTranspose2d( 32, 1, 3, 1, 1 )
 		)
-	def forward(self, feature):
+	def forward(self, fid, fpose, fillum, z):
+		# feature = torch.cat((fx, y_pose_onehot_, y_illum_onehot_, z_),1)
+		feature = torch.cat((fid, z),1)
 		x = self.fc( feature )
 		x = x.view(-1,320,6,6)
 		x = self.fconv( x )
@@ -150,8 +156,7 @@ class generator(nn.Module):
 	def forward(self, x_, y_pose_onehot_, y_illum_onehot_, z_):
 		fx = self.Genc( x_ )
 		fx = fx.view(-1, 320)
-		# feature = torch.cat((fx, y_pose_onehot_, y_illum_onehot_, z_),1)
-		x_hat = self.Gdec(fx)
+		x_hat = self.Gdec(fx, y_pose_onehot_, y_illum_onehot_, z_)
 
 		return x_hat
 
@@ -183,7 +188,7 @@ class DRGAN(object):
 
 		# networks init
 		# self.G = generator(self.Nz, self.Nd, self.Np, self.Ni)
-		self.G = generator(0,0,0,0)
+		self.G = generator(self.Nz,self.Nd,0,0)
 		self.D = Encoder('D', self.Nd, self.Np, self.Ni)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
@@ -232,10 +237,13 @@ class DRGAN(object):
 		for iB, (sample_x_,sample_y_) in enumerate(self.data_loader):
 			self.sample_x_ = sample_x_
 			break
+		self.sample_z_ = torch.rand( self.batch_size, self.Nz )
 		if self.gpu_mode:
 			self.sample_x_ = Variable(self.sample_x_.cuda(), volatile=True)
+			self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
 		else:
 			self.sample_x_ = Variable(self.sample_x_, volatile=True)
+			self.sample_z_ = Variable(self.sample_z_, volatile=True)
 
 
 		# fixed noise
@@ -282,7 +290,7 @@ class DRGAN(object):
 
 	def train(self):
 		self.train_hist = {}
-		#self.train_hist['D_loss'] = []
+		self.train_hist['D_loss'] = []
 		self.train_hist['G_loss'] = []
 		self.train_hist['per_epoch_time'] = []
 		self.train_hist['total_time'] = []
@@ -327,34 +335,36 @@ class DRGAN(object):
 					y_illum_onehot_ = Variable( y_illum_onehot_ )
 
 				# update D network
-				#self.D_optimizer.zero_grad()
+				self.D_optimizer.zero_grad()
 
-				#D_id, D_pose, D_illum = self.D(x_)
-				#D_real_loss_id = self.CE_loss(D_id, y_id_)
+				D_id, D_pose, D_illum = self.D(x_)
+				D_real_loss_id = self.CE_loss(D_id, y_id_)
 				#D_real_loss_pose = self.CE_loss(D_pose, y_pose_)
 				#D_real_loss_illum = self.CE_loss(D_illum, y_illum_)
 
-				#x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
-				#D_fake, _, _ = self.D(x_hat)
-				#D_fake_loss = self.CE_loss(D_fake, self.y_fake_)
+				x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
+				D_fake, _, _ = self.D(x_hat)
+				D_fake_loss = self.CE_loss(D_fake, self.y_fake_)
 
 				#D_loss = D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss
-				#self.train_hist['D_loss'].append(D_loss.data[0])
+				D_loss = D_real_loss_id + D_fake_loss
+				self.train_hist['D_loss'].append(D_loss.data[0])
 
-				#D_loss.backward()
-				#self.D_optimizer.step()
+				D_loss.backward()
+				self.D_optimizer.step()
 
 				# update G network
 				for iG in range(4):
 					self.G_optimizer.zero_grad()
 	
 					x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
-					G_loss = self.MSE_loss( x_hat, x_ )
-					#D_fake_id, D_fake_pose, D_fake_illum = self.D(x_hat)
-					#D_fake_loss_id = self.CE_loss(D_fake_id, y_id_)
+					#G_loss = self.MSE_loss( x_hat, x_ )
+					D_fake_id, D_fake_pose, D_fake_illum = self.D(x_hat)
+					D_fake_loss_id = self.CE_loss(D_fake_id, y_id_)
 					#D_fake_loss_pose = self.CE_loss(D_fake_pose, y_pose_)
 					#D_fake_loss_illum = self.CE_loss(D_fake_illum, y_illum_)
 					#G_loss = D_fake_loss_id + D_fake_loss_pose + D_fake_loss_illum
+					G_loss = D_fake_loss_id
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 	
@@ -364,11 +374,11 @@ class DRGAN(object):
 				if ((iB + 1) % 10) == 0:
 					print("Epoch: [%2d] [%4d/%4d] D_loss: %.8f, G_loss: %.8f" %
 						  ((epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  -1, G_loss.data[0]))
-						  #D_loss.data[0], G_loss.data[0]))
+						  D_loss.data[0], G_loss.data[0]))
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			self.visualize_results((epoch+1))
+			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 		self.train_hist['total_time'].append(time.time() - start_time)
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -391,7 +401,7 @@ class DRGAN(object):
 
 		if fix:
 			""" fixed noise """
-			samples = self.G(self.sample_x_, None, None, None )
+			samples = self.G(self.sample_x_, None, None, self.sample_z_ )
 			#samples = self.G(self.sample_x_pose_, self.sample_pose_, self.sample_illum_fixed_, self.sample_z_pose_)
 		else:
 			""" random noise """
