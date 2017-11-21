@@ -82,9 +82,14 @@ class Encoder( nn.Module ):
 			nn.AvgPool2d( 6 )
 		)
 
-		self.fc_id = nn.Linear( 320, Nd+1 )
-		#self.fc_pose = nn.Linear( 320, Np )
-		#self.fc_illum = nn.Linear( 320, Ni )
+		if self.name == 'D':
+			self.fc_GAN = nn.Sequential(
+				nn.Linear( 320, 1 ),
+				nn.Sigmoid()
+			)
+			self.fc_id = nn.Linear( 320, Nd )
+			#self.fc_pose = nn.Linear( 320, Np )
+			#self.fc_illum = nn.Linear( 320, Ni )
 
 		utils.initialize_weights(self)
 
@@ -92,12 +97,13 @@ class Encoder( nn.Module ):
 		x = self.conv( input )
 		if self.name == 'D':
 			x_flat = x.view(x.size(0),-1)
+			fGAN = self.fc_GAN( x_flat )
 			fid = self.fc_id( x_flat )
 			fpose = None
 			fillum = None
 			#fpose = self.fc_pose( x_flat )
 			#fillum = self.fc_illum( x_flat )
-			x = ( fid, fpose, fillum )
+			x = ( fGAN, fid, fpose, fillum )
 		return x
 
 class Decoder( nn.Module ):
@@ -111,27 +117,54 @@ class Decoder( nn.Module ):
 		self.fconv = nn.Sequential(
 			# FConv52, FConv51
 			nn.ConvTranspose2d( 320, 160, 3, 1, 1 ), 
+			nn.BatchNorm2d( 160 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 160, 256, 3, 1, 1 ), 
+			nn.BatchNorm2d( 256 ),
+			nn.ELU(),
 
 			# FConv43, FConv42, FConv41
 			nn.ConvTranspose2d( 256, 256, 3, 2, 1, output_padding=1 ), 
+			nn.BatchNorm2d( 256 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 256, 128, 3, 1, 1 ), 
+			nn.BatchNorm2d( 128 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 128, 192, 3, 1, 1 ), 
+			nn.BatchNorm2d( 192 ),
+			nn.ELU(),
 
 			# FConv33, FConv32, FConv31
 			nn.ConvTranspose2d( 192, 192, 3, 2, 1, output_padding=1 ), 
+			nn.BatchNorm2d( 192 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 192, 96, 3, 1, 1 ), 
+			nn.BatchNorm2d( 96 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 96, 128, 3, 1, 1 ), 
+			nn.BatchNorm2d( 128 ),
+			nn.ELU(),
 
 			# FConv23, FConv22, FConv21
 			nn.ConvTranspose2d( 128, 128, 3, 2, 1, output_padding=1 ), 
+			nn.BatchNorm2d( 128 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 128, 64, 3, 1, 1 ), 
+			nn.BatchNorm2d( 64 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 64, 64, 3, 1, 1 ), 
+			nn.BatchNorm2d( 64 ),
+			nn.ELU(),
 
 			# FConv13, FConv12, FConv11
 			nn.ConvTranspose2d( 64, 64, 3, 2, 1, output_padding=1 ), 
+			nn.BatchNorm2d( 64 ),
+			nn.ELU(),
 			nn.ConvTranspose2d( 64, 32, 3, 1, 1 ), 
-			nn.ConvTranspose2d( 32, 1, 3, 1, 1 )
+			nn.BatchNorm2d( 32 ),
+			nn.ELU(),
+			nn.ConvTranspose2d( 32, 1, 3, 1, 1 ),
+			nn.Sigmoid(),
 		)
 	def forward(self, fid, fpose, fillum, z):
 		# feature = torch.cat((fx, y_pose_onehot_, y_illum_onehot_, z_),1)
@@ -175,7 +208,7 @@ class DRGAN(object):
 		self.model_name = args.gan_type
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
-			self.Nd = 346 # 200
+			self.Nd = 337 # 200
 			self.Np = 9
 			self.Ni = 20
 			self.Nz = 50
@@ -197,9 +230,11 @@ class DRGAN(object):
 			self.G.cuda()
 			self.D.cuda()
 			self.CE_loss = nn.CrossEntropyLoss().cuda()
+			self.BCE_loss = nn.BCELoss().cuda()
 			self.MSE_loss = nn.MSELoss().cuda()
 		else:
 			self.CE_loss = nn.CrossEntropyLoss()
+			self.BCE_loss = nn.BCELoss()
 			self.MSE_loss = nn.MSELoss()
 
 #		print('---------- Networks architecture -------------')
@@ -296,9 +331,11 @@ class DRGAN(object):
 		self.train_hist['total_time'] = []
 
 		if self.gpu_mode:
-			self.y_fake_ = Variable((torch.ones(self.batch_size)*self.Nd).long().cuda())
+			self.y_real_ = Variable((torch.ones(self.batch_size,1)).cuda())
+			self.y_fake_ = Variable((torch.zeros(self.batch_size,1)).cuda())
 		else:
-			self.y_fake_ = Variable((torch.ones(self.batch_size)*self.Nd).long())
+			self.y_real_ = Variable((torch.ones(self.batch_size,1)))
+			self.y_fake_ = Variable((torch.zeros(self.batch_size,1)))
 
 		#self.D.train()
 		print('training start!!')
@@ -337,17 +374,18 @@ class DRGAN(object):
 				# update D network
 				self.D_optimizer.zero_grad()
 
-				D_id, D_pose, D_illum = self.D(x_)
+				D_GAN, D_id, D_pose, D_illum = self.D(x_)
+				D_real_loss_GAN = self.BCE_loss(D_GAN, self.y_real_)
 				D_real_loss_id = self.CE_loss(D_id, y_id_)
 				#D_real_loss_pose = self.CE_loss(D_pose, y_pose_)
 				#D_real_loss_illum = self.CE_loss(D_illum, y_illum_)
 
 				x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
-				D_fake, _, _ = self.D(x_hat)
-				D_fake_loss = self.CE_loss(D_fake, self.y_fake_)
+				D_fake, _, _, _ = self.D(x_hat)
+				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 
 				#D_loss = D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss
-				D_loss = D_real_loss_id + D_fake_loss
+				D_loss = D_real_loss_GAN + D_real_loss_id + D_fake_loss
 				self.train_hist['D_loss'].append(D_loss.data[0])
 
 				D_loss.backward()
@@ -359,12 +397,13 @@ class DRGAN(object):
 	
 					x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
 					#G_loss = self.MSE_loss( x_hat, x_ )
-					D_fake_id, D_fake_pose, D_fake_illum = self.D(x_hat)
+					D_fake_GAN, D_fake_id, D_fake_pose, D_fake_illum = self.D(x_hat)
+					D_fake_loss_GAN = self.BCE_loss(D_fake_GAN, self.y_fake_)
 					D_fake_loss_id = self.CE_loss(D_fake_id, y_id_)
 					#D_fake_loss_pose = self.CE_loss(D_fake_pose, y_pose_)
 					#D_fake_loss_illum = self.CE_loss(D_fake_illum, y_illum_)
 					#G_loss = D_fake_loss_id + D_fake_loss_pose + D_fake_loss_illum
-					G_loss = D_fake_loss_id
+					G_loss = D_fake_loss_GAN + D_fake_loss_id
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 	
@@ -372,12 +411,14 @@ class DRGAN(object):
 					self.G_optimizer.step()
 	
 				if ((iB + 1) % 10) == 0:
-					print("Epoch: [%2d] [%4d/%4d] D_loss: %.8f, G_loss: %.8f" %
+					print("Ep:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f, G: %.4f=%.4f+%.4f" %
 						  ((epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  D_loss.data[0], G_loss.data[0]))
+						  D_loss.data[0], D_real_loss_GAN.data[0], D_real_loss_id.data[0], D_fake_loss.data[0],
+						  G_loss.data[0], D_fake_loss_GAN.data[0], D_fake_loss_id.data[0]))
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			self.visualize_results((epoch+1))
+			self.save()
 			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 		self.train_hist['total_time'].append(time.time() - start_time)
