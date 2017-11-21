@@ -111,6 +111,10 @@ class MultiPie( Dataset ):
 		self.filenames = [ f for f in self.filenames 
 							if int(os.path.basename(f)[10:13]) in cam_ids ]
 							#if int(os.path.basename(f)[10:13]) in cam_ids and int(os.path.basename(f)[:3]) < 201 ]
+		self.subj_ids = sorted( set( [ int(os.path.basename(f)[:3]) for f in self.filenames ] ) )
+		self.subj_map = {}
+		for i, subj in enumerate( self.subj_ids ):
+			self.subj_map[subj] = i
 #		print('shuffling...', end='')
 #		sys.stdout.flush()
 #		time_start = time.time()
@@ -135,10 +139,18 @@ class MultiPie( Dataset ):
 		pose = self.cam_map[int(pose)]
 		if self.transform:
 			image = self.transform(image)
-		labels = { 'id': int(identity),
+		labels = { 'id': self.subj_map[int(identity)],
 					'pose': pose,
 					'illum': int(illum)}
 		return image, labels 
+
+def sample_z( nSamples, nDims, isCuda=False ):
+	z = torch.rand( nSamples, nDims )
+	if isCuda:
+		z = Variable(z.cuda())
+	else:
+		z = Variable(z)
+	return z
 
 def print_network(net):
     num_params = 0
