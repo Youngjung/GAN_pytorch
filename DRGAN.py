@@ -89,7 +89,7 @@ class Encoder( nn.Module ):
 			)
 			self.fc_id = nn.Linear( 320, Nd )
 			#self.fc_pose = nn.Linear( 320, Np )
-			#self.fc_illum = nn.Linear( 320, Ni )
+			self.fc_illum = nn.Linear( 320, Ni )
 
 		utils.initialize_weights(self)
 
@@ -100,9 +100,8 @@ class Encoder( nn.Module ):
 			fGAN = self.fc_GAN( x_flat )
 			fid = self.fc_id( x_flat )
 			fpose = None
-			fillum = None
 			#fpose = self.fc_pose( x_flat )
-			#fillum = self.fc_illum( x_flat )
+			fillum = self.fc_illum( x_flat )
 			x = ( fGAN, fid, fpose, fillum )
 		return x
 
@@ -166,9 +165,10 @@ class Decoder( nn.Module ):
 			nn.ConvTranspose2d( 32, 1, 3, 1, 1 ),
 			nn.Sigmoid(),
 		)
-	def forward(self, fid, fpose, fillum, z):
-		# feature = torch.cat((fx, y_pose_onehot_, y_illum_onehot_, z_),1)
-		feature = torch.cat((fid, z),1)
+	def forward(self, fid, y_pose_onehot, y_illum_onehot, z):
+		# feature = torch.cat((fx, y_pose_onehot, y_illum_onehot, z),1)
+		#feature = torch.cat((fid, z),1)
+		feature = torch.cat((fid, y_illum_onehot, z),1)
 		x = self.fc( feature )
 		x = x.view(-1,320,6,6)
 		x = self.fconv( x )
@@ -176,8 +176,6 @@ class Decoder( nn.Module ):
 
 
 class generator(nn.Module):
-	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
-	# Architecture : FC1024_BR-FC7x7x128_BR-(64)4dc2s_BR-(1)4dc2s_S
 	def __init__(self, Nz, Nd, Np, Ni=0):
 		super(generator, self).__init__()
 
@@ -221,7 +219,7 @@ class DRGAN(object):
 
 		# networks init
 		# self.G = generator(self.Nz, self.Nd, self.Np, self.Ni)
-		self.G = generator(self.Nz,self.Nd,0,0)
+		self.G = generator(self.Nz,self.Nd,0,self.Ni)
 		self.D = Encoder('D', self.Nd, self.Np, self.Ni)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
@@ -271,14 +269,18 @@ class DRGAN(object):
 
 		for iB, (sample_x_,sample_y_) in enumerate(self.data_loader):
 			self.sample_x_ = sample_x_
+			self.sample_illum_ = torch.zeros( self.batch_size, self.Ni )
+			self.sample_illum_.scatter_(1, sample_y_['illum'].view(-1,1), 1)
 			break
 		self.sample_z_ = torch.rand( self.batch_size, self.Nz )
 		if self.gpu_mode:
 			self.sample_x_ = Variable(self.sample_x_.cuda(), volatile=True)
 			self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
+			self.sample_illum_ = Variable(self.sample_illum_.cuda(), volatile=True)
 		else:
 			self.sample_x_ = Variable(self.sample_x_, volatile=True)
 			self.sample_z_ = Variable(self.sample_z_, volatile=True)
+			self.sample_illum_ = Variable(self.sample_illum_, volatile=True)
 
 
 		# fixed noise
@@ -378,14 +380,14 @@ class DRGAN(object):
 				D_real_loss_GAN = self.BCE_loss(D_GAN, self.y_real_)
 				D_real_loss_id = self.CE_loss(D_id, y_id_)
 				#D_real_loss_pose = self.CE_loss(D_pose, y_pose_)
-				#D_real_loss_illum = self.CE_loss(D_illum, y_illum_)
+				D_real_loss_illum = self.CE_loss(D_illum, y_illum_)
 
 				x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
 				D_fake, _, _, _ = self.D(x_hat)
 				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 
 				#D_loss = D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss
-				D_loss = D_real_loss_GAN + D_real_loss_id + D_fake_loss
+				D_loss = D_real_loss_GAN + D_real_loss_id + D_real_loss_illum + D_fake_loss
 				self.train_hist['D_loss'].append(D_loss.data[0])
 
 				D_loss.backward()
@@ -398,12 +400,12 @@ class DRGAN(object):
 					x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
 					#G_loss = self.MSE_loss( x_hat, x_ )
 					D_fake_GAN, D_fake_id, D_fake_pose, D_fake_illum = self.D(x_hat)
-					D_fake_loss_GAN = self.BCE_loss(D_fake_GAN, self.y_fake_)
+					D_fake_loss_GAN = self.BCE_loss(D_fake_GAN, self.y_real_)
 					D_fake_loss_id = self.CE_loss(D_fake_id, y_id_)
 					#D_fake_loss_pose = self.CE_loss(D_fake_pose, y_pose_)
-					#D_fake_loss_illum = self.CE_loss(D_fake_illum, y_illum_)
+					D_fake_loss_illum = self.CE_loss(D_fake_illum, y_illum_)
 					#G_loss = D_fake_loss_id + D_fake_loss_pose + D_fake_loss_illum
-					G_loss = D_fake_loss_GAN + D_fake_loss_id
+					G_loss = D_fake_loss_GAN + D_fake_loss_id + D_fake_loss_illum
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 	
@@ -411,9 +413,10 @@ class DRGAN(object):
 					self.G_optimizer.step()
 	
 				if ((iB + 1) % 10) == 0:
-					print("Ep:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f, G: %.4f=%.4f+%.4f" %
+					print("Ep:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f+%.4f, G: %.4f=%.4f+%.4f" %
 						  ((epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  D_loss.data[0], D_real_loss_GAN.data[0], D_real_loss_id.data[0], D_fake_loss.data[0],
+						  D_loss.data[0], D_real_loss_GAN.data[0], D_real_loss_id.data[0],
+						  D_real_loss_illum.data[0], D_fake_loss.data[0],
 						  G_loss.data[0], D_fake_loss_GAN.data[0], D_fake_loss_id.data[0]))
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
@@ -442,7 +445,7 @@ class DRGAN(object):
 
 		if fix:
 			""" fixed noise """
-			samples = self.G(self.sample_x_, None, None, self.sample_z_ )
+			samples = self.G(self.sample_x_, None, self.sample_illum_, self.sample_z_ )
 			#samples = self.G(self.sample_x_pose_, self.sample_pose_, self.sample_illum_fixed_, self.sample_z_pose_)
 		else:
 			""" random noise """
@@ -458,6 +461,8 @@ class DRGAN(object):
 		else:
 			samples = samples.data.numpy().transpose(0, 2, 3, 1)
 
+		utils.save_images(self.sample_x_[:image_frame_width* image_frame_height, :, :, :], [image_frame_width, image_frame_height],
+						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d_x' % epoch + '.png')
 		utils.save_images(samples[:image_frame_width* image_frame_height, :, :, :], [image_frame_width, image_frame_height],
 						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.png')
 
