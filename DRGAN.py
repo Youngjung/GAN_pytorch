@@ -458,10 +458,12 @@ class DRGAN(object):
 
 		if self.gpu_mode:
 			samples = samples.cpu().data.numpy().transpose(0, 2, 3, 1)
+			sample_x_ = self.sample_x_.cpu().data.numpy().transpose(0, 2, 3, 1)
 		else:
 			samples = samples.data.numpy().transpose(0, 2, 3, 1)
+			sample_x_ = self.sample_x_.data.numpy().transpose(0, 2, 3, 1)
 
-		utils.save_images(self.sample_x_[:image_frame_width* image_frame_height, :, :, :], [image_frame_width, image_frame_height],
+		utils.save_images(sample_x_[:image_frame_width* image_frame_height, :, :, :], [image_frame_width, image_frame_height],
 						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d_x' % epoch + '.png')
 		utils.save_images(samples[:image_frame_width* image_frame_height, :, :, :], [image_frame_width, image_frame_height],
 						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.png')
