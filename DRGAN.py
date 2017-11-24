@@ -88,7 +88,7 @@ class Encoder( nn.Module ):
 				nn.Sigmoid()
 			)
 			self.fc_id = nn.Linear( 320, Nd )
-			#self.fc_pose = nn.Linear( 320, Np )
+			self.fc_pose = nn.Linear( 320, Np )
 			self.fc_illum = nn.Linear( 320, Ni )
 
 		utils.initialize_weights(self)
@@ -99,8 +99,7 @@ class Encoder( nn.Module ):
 			x_flat = x.view(x.size(0),-1)
 			fGAN = self.fc_GAN( x_flat )
 			fid = self.fc_id( x_flat )
-			fpose = None
-			#fpose = self.fc_pose( x_flat )
+			fpose = self.fc_pose( x_flat )
 			fillum = self.fc_illum( x_flat )
 			x = ( fGAN, fid, fpose, fillum )
 		return x
@@ -165,10 +164,8 @@ class Decoder( nn.Module ):
 			nn.ConvTranspose2d( 32, 1, 3, 1, 1 ),
 			nn.Sigmoid(),
 		)
-	def forward(self, fid, y_pose_onehot, y_illum_onehot, z):
-		# feature = torch.cat((fx, y_pose_onehot, y_illum_onehot, z),1)
-		#feature = torch.cat((fid, z),1)
-		feature = torch.cat((fid, y_illum_onehot, z),1)
+	def forward(self, fx, y_pose_onehot, y_illum_onehot, z):
+		feature = torch.cat((fx, y_pose_onehot, y_illum_onehot, z),1)
 		x = self.fc( feature )
 		x = x.view(-1,320,6,6)
 		x = self.fconv( x )
@@ -218,8 +215,7 @@ class DRGAN(object):
 
 
 		# networks init
-		# self.G = generator(self.Nz, self.Nd, self.Np, self.Ni)
-		self.G = generator(self.Nz,self.Nd,0,self.Ni)
+		self.G = generator(self.Nz, self.Nd, self.Np, self.Ni)
 		self.D = Encoder('D', self.Nd, self.Np, self.Ni)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
@@ -258,72 +254,40 @@ class DRGAN(object):
 												 shuffle=True)
 		elif self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.data_loader = DataLoader( utils.MultiPie(data_dir,
-				transform=transforms.Compose(
-				[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()]),
-				cam_ids=[51]),
+					transform=transforms.Compose(
+					[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()])),
 				batch_size=self.batch_size, shuffle=True) 
 		elif self.dataset == 'CASIA-WebFace':
 			self.data_loader = utils.CustomDataLoader(data_dir, transform=transforms.Compose(
 				[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()]), batch_size=self.batch_size,
 												 shuffle=True)
-
+		# fixed samples for reconstruction visualization
+		nSamples = self.Np*self.Ni
+		sample_x_s = []
 		for iB, (sample_x_,sample_y_) in enumerate(self.data_loader):
-			self.sample_x_ = sample_x_
-			self.sample_illum_ = torch.zeros( self.batch_size, self.Ni )
-			self.sample_illum_.scatter_(1, sample_y_['illum'].view(-1,1), 1)
-			break
-		self.sample_z_ = torch.rand( self.batch_size, self.Nz )
+			sample_x_s.append( sample_x_ )
+			if iB > nSamples // self.batch_size:
+				break
+		self.sample_x_ = torch.cat( sample_x_s )[:nSamples,:,:,:]
+		self.sample_pose_ = torch.zeros( nSamples, self.Np )
+		self.sample_illum_ = torch.zeros( nSamples, self.Ni )
+		for iS in range( self.Np*self.Ni ):
+			i = iS%self.Ni
+			p = iS//self.Ni
+			self.sample_pose_[iS,p] = 1
+			self.sample_illum_[iS,i] = 1
+		self.sample_z_ = torch.rand( nSamples, self.Nz )
+
 		if self.gpu_mode:
 			self.sample_x_ = Variable(self.sample_x_.cuda(), volatile=True)
 			self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
+			self.sample_pose_ = Variable(self.sample_pose_.cuda(), volatile=True)
 			self.sample_illum_ = Variable(self.sample_illum_.cuda(), volatile=True)
 		else:
 			self.sample_x_ = Variable(self.sample_x_, volatile=True)
 			self.sample_z_ = Variable(self.sample_z_, volatile=True)
+			self.sample_pose_ = Variable(self.sample_pose_, volatile=True)
 			self.sample_illum_ = Variable(self.sample_illum_, volatile=True)
-
-
-		# fixed noise
-		#sample_x_ = self.data_loader.dataset[0][0].unsqueeze(0)
-		#self.sample_x_pose_ = sample_x_.repeat( self.sample_num*self.Np,1,1,1 )
-		#self.sample_x_illum_ = sample_x_.repeat( self.sample_num*self.Ni,1,1,1 )
-		#sample_z_source_ = torch.rand( self.sample_num, self.Nz )
-		#self.sample_z_pose_ = torch.zeros( self.sample_num*self.Np, self.Nz )
-		#self.sample_z_illum_ = torch.zeros( self.sample_num*self.Ni, self.Nz )
-
-		#for i in range(self.sample_num):
-		#	self.sample_z_pose_[i*self.Np:(i+1)*self.Np] = sample_z_source_[i].repeat(self.Np,1)
-		#	self.sample_z_illum_[i*self.Ni:(i+1)*self.Ni] = sample_z_source_[i].repeat(self.Ni,1)
-		#sample_pose = torch.LongTensor( range(self.Np) ).repeat(self.sample_num)
-		#sample_illum = torch.LongTensor( range(self.Ni) ).repeat(self.sample_num)
-		#sample_pose_fixed_ = (torch.ones( self.sample_num*self.Ni )*4).long()
-		#sample_illum_fixed_ = (torch.ones( self.sample_num*self.Np )*10).long()
-		#self.sample_pose_ = torch.zeros( self.sample_num*self.Np, self.Np )
-		#self.sample_illum_ = torch.zeros( self.sample_num*self.Ni, self.Ni )
-		#self.sample_pose_fixed_ = torch.zeros( self.sample_num*self.Ni, self.Np )
-		#self.sample_illum_fixed_ = torch.zeros( self.sample_num*self.Np, self.Ni )
-		#self.sample_pose_.scatter_(1, sample_pose.view(-1,1), 1)
-		#self.sample_illum_.scatter_(1, sample_illum.view(-1,1), 1)
-		#self.sample_pose_fixed_.scatter_(1, sample_pose_fixed_.view(-1,1), 1)
-		#self.sample_illum_fixed_.scatter_(1, sample_illum_fixed_.view(-1,1), 1)
-		#if self.gpu_mode:
-		#	self.sample_x_pose_ = Variable( self.sample_x_pose_.cuda(), volatile=True )
-		#	self.sample_x_illum_ = Variable( self.sample_x_illum_.cuda(), volatile=True )
-		#	self.sample_pose_ = Variable( self.sample_pose_.cuda(), volatile=True )
-		#	self.sample_pose_fixed_ = Variable( self.sample_pose_fixed_.cuda(), volatile=True )
-		#	self.sample_illum_ = Variable( self.sample_illum_.cuda(), volatile=True )
-		#	self.sample_illum_fixed_ = Variable( self.sample_illum_fixed_.cuda(), volatile=True )
-		#	self.sample_z_pose_ = Variable(self.sample_z_pose_.cuda(), volatile=True)
-		#	self.sample_z_illum_ = Variable(self.sample_z_illum_.cuda(), volatile=True)
-		#else:
-		#	self.sample_x_pose_ = Variable( self.sample_x_pose_, volatile=True )
-		#	self.sample_x_illum_ = Variable( self.sample_x_illum_, volatile=True )
-		#	self.sample_pose_ = Variable( self.sample_pose_, volatile=True )
-		#	self.sample_pose_fixed_ = Variable( self.sample_pose_fixed_, volatile=True )
-		#	self.sample_illum_ = Variable( self.sample_illum_, volatile=True )
-		#	self.sample_illum_fixed_ = Variable( self.sample_illum_fixed_, volatile=True )
-		#	self.sample_z_pose_ = Variable(self.sample_z_pose_, volatile=True)
-		#	self.sample_z_illum_ = Variable(self.sample_z_illum_, volatile=True)
 
 	def train(self):
 		self.train_hist = {}
@@ -379,15 +343,14 @@ class DRGAN(object):
 				D_GAN, D_id, D_pose, D_illum = self.D(x_)
 				D_real_loss_GAN = self.BCE_loss(D_GAN, self.y_real_)
 				D_real_loss_id = self.CE_loss(D_id, y_id_)
-				#D_real_loss_pose = self.CE_loss(D_pose, y_pose_)
+				D_real_loss_pose = self.CE_loss(D_pose, y_pose_)
 				D_real_loss_illum = self.CE_loss(D_illum, y_illum_)
 
 				x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
 				D_fake, _, _, _ = self.D(x_hat)
 				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 
-				#D_loss = D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss
-				D_loss = D_real_loss_GAN + D_real_loss_id + D_real_loss_illum + D_fake_loss
+				D_loss = D_real_loss_GAN + D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss
 				self.train_hist['D_loss'].append(D_loss.data[0])
 
 				D_loss.backward()
@@ -398,14 +361,12 @@ class DRGAN(object):
 					self.G_optimizer.zero_grad()
 	
 					x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
-					#G_loss = self.MSE_loss( x_hat, x_ )
 					D_fake_GAN, D_fake_id, D_fake_pose, D_fake_illum = self.D(x_hat)
 					D_fake_loss_GAN = self.BCE_loss(D_fake_GAN, self.y_real_)
 					D_fake_loss_id = self.CE_loss(D_fake_id, y_id_)
-					#D_fake_loss_pose = self.CE_loss(D_fake_pose, y_pose_)
+					D_fake_loss_pose = self.CE_loss(D_fake_pose, y_pose_)
 					D_fake_loss_illum = self.CE_loss(D_fake_illum, y_illum_)
-					#G_loss = D_fake_loss_id + D_fake_loss_pose + D_fake_loss_illum
-					G_loss = D_fake_loss_GAN + D_fake_loss_id + D_fake_loss_illum
+					G_loss = D_fake_loss_GAN + D_fake_loss_id + D_fake_loss_pose + D_fake_loss_illum
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 	
@@ -440,12 +401,12 @@ class DRGAN(object):
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 
-		image_frame_width = self.sample_num
-		image_frame_height = self.Np
+		nRows = self.Np
+		nCols= self.Ni
 
 		if fix:
 			""" fixed noise """
-			samples = self.G(self.sample_x_, None, self.sample_illum_, self.sample_z_ )
+			samples = self.G(self.sample_x_, self.sample_pose_, self.sample_illum_, self.sample_z_ )
 			#samples = self.G(self.sample_x_pose_, self.sample_pose_, self.sample_illum_fixed_, self.sample_z_pose_)
 		else:
 			""" random noise """
@@ -463,9 +424,9 @@ class DRGAN(object):
 			samples = samples.data.numpy().transpose(0, 2, 3, 1)
 			sample_x_ = self.sample_x_.data.numpy().transpose(0, 2, 3, 1)
 
-		utils.save_images(sample_x_[:image_frame_width* image_frame_height, :, :, :], [image_frame_width, image_frame_height],
+		utils.save_images(sample_x_[:nRows*nCols, :, :, :], [nRows, nCols],
 						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d_x' % epoch + '.png')
-		utils.save_images(samples[:image_frame_width* image_frame_height, :, :, :], [image_frame_width, image_frame_height],
+		utils.save_images(samples[:nRows*nCols, :, :, :], [nRows, nCols],
 						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.png')
 
 	def save(self):
