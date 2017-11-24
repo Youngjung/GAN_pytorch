@@ -133,7 +133,7 @@ class Decoder( nn.Module ):
 		)
 
 		self.simplefconv = nn.Sequential(
-			nn.ConvTranspose2d( 320, 64, 4, 2, 1),
+			nn.ConvTranspose2d( 128, 64, 4, 2, 1),
 			nn.BatchNorm2d(64),
 			nn.ReLU(),
 			nn.ConvTranspose2d(64, 1, 4, 2, 1),
