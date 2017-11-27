@@ -236,7 +236,7 @@ class DRAGAN(object):
 				G_loss.backward()
 				self.G_optimizer.step()
 
-				if ((iter + 1) % 100) == 0:
+				if ((iter + 1) % 10) == 0:
 					print("Epoch: [%2d] [%4d/%4d] D_loss: %.8f, G_loss: %.8f" %
 						  ((epoch + 1), (iter + 1), self.data_loader.dataset.__len__() // self.batch_size, D_loss.data[0], G_loss.data[0]))
 
