@@ -3,7 +3,7 @@ from scipy.misc import imsave
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
+from torch.autograd import Variable, grad
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -201,6 +201,7 @@ class DRGAN(object):
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
 		self.model_name = args.gan_type
+		self.lambda_ = 0.25
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -350,7 +351,26 @@ class DRGAN(object):
 				D_fake, _, _, _ = self.D(x_hat)
 				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 
-				D_loss = D_real_loss_GAN + D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss
+				# DRAGAN Loss (Gradient penalty)
+				if self.gpu_mode:
+					alpha = torch.rand(x_.size()).cuda()
+					x_hat = Variable(alpha*x_.data + (1-alpha)*(x_.data+0.5*x_.data.std()*torch.rand(x_.size()).cuda()),
+										requires_grad=True)
+				else:
+					alpha = torch.rand(x_.size())
+					x_hat = Variable(alpha*x_.data + (1-alpha)*(x_.data+0.5*x_.data.std()*torch.rand(x_.size())),
+										requires_grad=True)
+				pred_hat,_,_,_ = self.D(x_hat)
+				if self.gpu_mode:
+					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
+										create_graph=True, retain_graph=True, only_inputs=True)[0]
+				else:
+					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
+										create_graph=True, retain_graph=True, only_inputs=True)[0]
+
+				gradient_penalty = self.lambda_ * ((gradients.view(gradients.size(0),-1).norm(2,1)-1)**2).mean()
+
+				D_loss = D_real_loss_GAN + D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss + gradient_penalty
 				self.train_hist['D_loss'].append(D_loss.data[0])
 
 				D_loss.backward()
@@ -424,7 +444,8 @@ class DRGAN(object):
 			samples = samples.data.numpy().transpose(0, 2, 3, 1)
 			sample_x_ = self.sample_x_.data.numpy().transpose(0, 2, 3, 1)
 
-		utils.save_images(sample_x_[:nRows*nCols, :, :, :], [nRows, nCols],
+		if epoch == 1:
+			utils.save_images(sample_x_[:nRows*nCols, :, :, :], [nRows, nCols],
 						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d_x' % epoch + '.png')
 		utils.save_images(samples[:nRows*nCols, :, :, :], [nRows, nCols],
 						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.png')
