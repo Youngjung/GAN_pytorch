@@ -9,13 +9,32 @@ Separate discriminator for real/fake instead of one additional dimension for fak
 Gradient penalty from [DRAGAN(arXiv)](https://arxiv.org/abs/1705.07215) is added
 
 ## Results
+
+each row is generated with the same pose condition
+
+top row = taken from left
+
+middle row = taken from front
+
+bottom row = taken from right
+
+each column is generated with the same illumination condition
+
+left column = lighting from right
+
+center column = lighting from front
+
+right column = lighting from left
+
 without gradient penalty
 
 <img src = 'assets/MultiPie_results/DRGAN_epoch004.png'>
 
 withgradient penalty
 
-<img src = 'assets/MultiPie_results/DRGAN_wGradPenalty_epoch002.png' height = '200px'>
+<img src = 'assets/MultiPie_results/DRGAN_wGradPenalty_epoch002.png'>
+
+Pose is correctly modeled while illumination is not
 
 # pytorch-generative-model-collections
 The content below remains as is from [pytorch-generative-model-collections](https://github.com/znxlwm/pytorch-generative-model-collections) by [Hyeonwoo Kang](https://github.com/znxlwm)
