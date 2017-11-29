@@ -11,7 +11,7 @@ Gradient penalty from [DRAGAN(arXiv)](https://arxiv.org/abs/1705.07215) is added
 ## Results
 without gradient penalty
 
-<img src = 'assets/MultiPie_results/DRGAN_epoch004.png' height = '200px'>
+<img src = 'assets/MultiPie_results/DRGAN_epoch004.png'>
 
 withgradient penalty
 
