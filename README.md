@@ -1,3 +1,14 @@
+# DR-GAN implementation
+
+DRGAN.py is an unofficial implementation of [Disentangled Representation Learning GAN for Pose-Invariant Face Recognition](http://cvlab.cse.msu.edu/project-dr-gan.html)
+
+## Difference from the originam paper
+
+Separate discriminator for real/fake instead of one additional dimension for fake label
+Gradient penalty from [DRAGAN(arXiv)](https://arxiv.org/abs/1705.07215) is added
+
+The content below remains as is from [pytorch-generative-model-collections](https://github.com/znxlwm/pytorch-generative-model-collections) by [Hyeonwoo Kang](https://github.com/znxlwm)
+
 # pytorch-generative-model-collections
 Original : [[Tensorflow version]](https://github.com/hwalsuklee/tensorflow-generative-model-collections)
 
