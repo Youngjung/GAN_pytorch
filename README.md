@@ -20,11 +20,11 @@ Each column is generated with the same illumination condition.
 - center column = lighting from front
 - right column = lighting from left
 
-without gradient penalty
+without gradient penalty (epoch 4)
 
 <img src = 'assets/MultiPie_results/DRGAN_epoch004.png'>
 
-withgradient penalty
+withgradient penalty (epoch 2)
 
 <img src = 'assets/MultiPie_results/DRGAN_wGradPenalty_epoch002.png'>
 
