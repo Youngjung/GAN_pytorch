@@ -20,6 +20,10 @@ Each column is generated with the same illumination condition.
 - center column = lighting from front
 - right column = lighting from left
 
+sample input
+
+<img src = 'assets/MultiPie_results/sample_input.png'>
+
 without gradient penalty (epoch 4)
 
 <img src = 'assets/MultiPie_results/DRGAN_epoch004.png'>
