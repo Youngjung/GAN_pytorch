@@ -11,6 +11,7 @@ from EBGAN import EBGAN
 from BEGAN import BEGAN
 from DRGAN import DRGAN
 from AE import AutoEncoder
+from GAN3D import GAN3D
 
 """parsing and configuration"""
 def parse_args():
@@ -18,10 +19,10 @@ def parse_args():
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument('--gan_type', type=str, default='EBGAN',
-                        choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE'],
+                        choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE', 'GAN3D'],
                         help='The type of GAN')#, required=True)
     parser.add_argument('--dataset', type=str, default='mnist', 
-						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace'],
+						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet'],
                         help='The name of dataset')
     parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
     parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')
@@ -66,6 +67,11 @@ def check_args(args):
     except:
         print('batch size must be larger than or equal to one')
 
+	try:
+		assert args.gan_type=='3DGAN' ^ args.dataset=='ShapeNet'
+	except:
+		print( '--gan_type=3DGAN and --dataset=ShapeNet should be used together' )
+
     return args
 
 """main"""
@@ -100,6 +106,8 @@ def main():
         gan = DRGAN(args)
     elif args.gan_type == 'AE':
         gan = AutoEncoder(args)
+    elif args.gan_type == 'GAN3D':
+        gan = GAN3D(args)
     else:
         raise Exception("[!] There is no option for " + args.gan_type)
 
