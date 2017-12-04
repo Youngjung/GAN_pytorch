@@ -1,5 +1,5 @@
 from __future__ import print_function
-import os, sys, gzip, torch, time
+import os, csv, sys, gzip, torch, time
 import torch.nn as nn
 import numpy as np
 import scipy.misc
@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
+
+from utils_3D.data_io import read_binvox
+from utils_3D.visualize import plot_voxel
 
 import pdb
 
@@ -101,10 +104,9 @@ class MultiPie( Dataset ):
 	
 			print('{:.0f}sec, {} images found.'.format( time.time()-time_start, len(self.filenames)))
 	
-			f = open(fname_cache, 'w')
-			for fname in self.filenames:
-				f.write(fname+'\n')
-			f.close()
+			with open(fname_cache, 'w') as f:
+				for fname in self.filenames:
+					f.write(fname+'\n')
 			print( 'cached in {}'.format(fname_cache) )
 
 		# filtering : 9 cams and 200 subjects
@@ -143,6 +145,74 @@ class MultiPie( Dataset ):
 					'pose': pose,
 					'illum': int(illum)}
 		return image, labels 
+
+class ShapeNet( Dataset ):
+	def __init__( self, root_dir, transform=None, synsetId='chair'):
+		self.dict_list = []
+		self.root_dir = root_dir
+		self.transform = transform
+
+		# read wordnet
+		wordnet = {}
+		with open('words.txt') as f_wordnet:
+			for line in f_wordnet:
+				tokens = line[:-1].split('\t')
+				if not tokens[1] in wordnet:
+					wordnet[ tokens[1] ] = tokens[0][1:]
+
+		# convert word to synsetID
+		if not synsetId.isdigit():
+			synsetId = wordnet[synsetId]
+
+		# read shapenet split
+		fname_cache = 'cache_ShapeNet.csv'
+		if os.path.exists(fname_cache):
+			with open(fname_cache) as f:
+				reader = csv.DictReader(f)
+				for line in reader:
+					self.dict_list.append(line)
+			print( 'restored ShapeNet from {}'.format(fname_cache) )
+		else:
+			path_csv = os.path.join(root_dir,'all.csv')
+			print( 'loading all.csv with synsetId {}...'.format(synsetId) )
+			with open(path_csv) as f:
+				reader = csv.DictReader(f)
+				for line in reader:
+					if int(line['synsetId']) == int(synsetId):
+						self.dict_list.append(line)
+			nRawSamples = len(self.dict_list)
+			print( 'checking existence of actual models from all.csv...')
+			self.dict_list = [ sample for sample in self.dict_list
+							if os.path.exists( os.path.join( self.root_dir, 'ShapeNetCore.v2', sample['synsetId'], sample['modelId'],
+												'models','model_normalized.solid.binvox' ) ) ]
+			nExistingSamples = len(self.dict_list)
+			print( '{} samples exist among {} samples from all.csv'.format(nExistingSamples,nRawSamples) )
+
+			fieldnames = ['id', 'synsetId', 'subSynsetId', 'modelId', 'split']
+			with open(fname_cache, 'w') as f:
+				writer = csv.DictWriter(f, fieldnames=fieldnames)
+				writer.writeheader()
+				for sample in self.dict_list:
+					writer.writerow(sample)
+			print( 'cached in {}'.format(fname_cache) )
+
+	def __len__( self ):
+		return len( self.dict_list )
+	
+	def __getitem__( self, idx ):
+		data = self.dict_list[idx]
+		path_sample = os.path.join( self.root_dir, 'ShapeNetCore.v2', data['synsetId'], data['modelId'] )
+		path_binvox = os.path.join( path_sample, 'models', 'model_normalized.solid.binvox' )
+		voxel_data = read_binvox( path_binvox )
+#		plot_voxel( voxel_data, save_file='sample_{}.png'.format(idx) )
+
+		if self.transform:
+			voxel_data = self.transform(voxel_data)
+		voxel_data = voxel_data.unsqueeze(0)
+		labels = { 'id': data['id'],
+					'synsetId': data['synsetId'] }
+		return voxel_data, labels 
+
 
 def sample_z( nSamples, nDims, isCuda=False ):
 	z = torch.rand( nSamples, nDims )
