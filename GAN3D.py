@@ -22,19 +22,20 @@ class generator(nn.Module):
 			self.output_dim = 1
 
 		self.deconv = nn.Sequential(
-			nn.ConvTranspose3d(200, 512, 4),
+			nn.ConvTranspose3d(200, 512, 4, bias=False),
 			nn.BatchNorm3d(512),
 			nn.ReLU(),
-			nn.ConvTranspose3d(512, 256, 4, 2, 1),
+			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(256),
 			nn.ReLU(),
-			nn.ConvTranspose3d(256, 128, 4, 2, 1),
+			nn.ConvTranspose3d(256, 128, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(128),
 			nn.ReLU(),
-			nn.ConvTranspose3d(128, 64, 4, 2, 1),
+			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
 			nn.ReLU(),
-			nn.ConvTranspose3d(64, 1, 4, 2, 1),
+			nn.ConvTranspose3d(64, 1, 4, 2, 1, bias=False),
+#			nn.Tanh()
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
@@ -58,19 +59,19 @@ class discriminator(nn.Module):
 			self.output_dim = 1
 
 		self.conv = nn.Sequential(
-			nn.Conv3d(1, 64, 4, 2, 1),
+			nn.Conv3d(1, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(64, 128, 4, 2, 1),
+			nn.Conv3d(64, 128, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(128),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(128, 256, 4, 2, 1),
+			nn.Conv3d(128, 256, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(256),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(256, 512, 4, 2, 1),
+			nn.Conv3d(256, 512, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(512),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(512, 1, 4),
+			nn.Conv3d(512, 1, 4, bias=False),
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
@@ -86,14 +87,19 @@ class GAN3D(object):
 		# parameters
 		self.epoch = args.epoch
 		self.batch_size = args.batch_size
+		self.test_sample_size = args.test_sample_size
 		self.save_dir = args.save_dir
 		self.result_dir = args.result_dir
 		self.dataset = args.dataset
 		self.dataroot_dir = args.dataroot_dir
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
+		self.use_GP = args.use_GP
 		self.model_name = args.gan_type
+		if self.use_GP:
+			self.model_name = self.model_name + '_GP'
 		self.lambda_ = 0.25
+		self.D_threshold = 0.8
 
 		# networks init
 		self.G = generator(self.dataset)
@@ -108,22 +114,26 @@ class GAN3D(object):
 		else:
 			self.BCE_loss = nn.BCELoss()
 
-		# print('---------- Networks architecture -------------')
-		# utils.print_network(self.G)
-		# utils.print_network(self.D)
-		# print('-----------------------------------------------')
+#		print('---------- Networks architecture -------------')
+#		utils.print_network(self.G)
+#		utils.print_network(self.D)
+#		print('-----------------------------------------------')
 
 		# load dataset
 		data_dir = os.path.join( self.dataroot_dir, self.dataset )
 		if self.dataset == 'ShapeNet':
-			self.data_loader = DataLoader( utils.ShapeNet(data_dir,	transform=transforms.ToTensor()),
+			self.data_loader = DataLoader( utils.ShapeNet(data_dir),
 											batch_size=self.batch_size, shuffle=True)
 
 		self.z_dim = 200
 
 		# fixed noise
 		if self.gpu_mode:
-			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
+#			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
+			self.sample_z_ = Variable( 
+						torch.normal(torch.zeros(self.test_sample_size, self.z_dim),
+						torch.ones(self.test_sample_size,self.z_dim)*0.33).cuda(),
+						volatile=True)
 		else:
 			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
 
@@ -146,11 +156,12 @@ class GAN3D(object):
 			epoch_start_time = time.time()
 			self.G.train()
 			start_time_epoch = time.time()
-			for iter, (x_, _) in enumerate(self.data_loader):
-				if iter == self.data_loader.dataset.__len__() // self.batch_size:
+			for iB, (x_, _) in enumerate(self.data_loader):
+				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
-				z_ = torch.rand((self.batch_size, self.z_dim))
+#				z_ = torch.rand((self.batch_size, self.z_dim))
+				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
 
 				if self.gpu_mode:
 					x_, z_ = Variable(x_.cuda()), Variable(z_.cuda())
@@ -169,34 +180,36 @@ class GAN3D(object):
 				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 				num_correct_fake = torch.sum(D_fake<0.5)
 
-#				""" DRAGAN Loss (Gradient penalty) """
-#				# This is borrowed from https://github.com/jfsantos/dragan-pytorch/blob/master/dragan.py
-#				if self.gpu_mode:
-#					alpha = torch.rand(x_.size()).cuda()
-#					x_hat = Variable(alpha * x_.data + (1 - alpha) * (x_.data + 0.5 * x_.data.std() * torch.rand(x_.size()).cuda()),
-#								 requires_grad=True)
-#				else:
-#					alpha = torch.rand(x_.size())
-#					x_hat = Variable(alpha * x_.data + (1 - alpha) * (x_.data + 0.5 * x_.data.std() * torch.rand(x_.size())),
-#						requires_grad=True)
-#				pred_hat = self.D(x_hat)
-#				if self.gpu_mode:
-#					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
-#								 create_graph=True, retain_graph=True, only_inputs=True)[0]
-#				else:
-#					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
-#									 create_graph=True, retain_graph=True, only_inputs=True)[0]
-#
-#				gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
-
-#				D_loss = D_real_loss + D_fake_loss + gradient_penalty
-				D_loss = D_real_loss + D_fake_loss
-				self.train_hist['D_loss'].append(D_loss.data[0])
+				""" DRAGAN Loss (Gradient penalty) """
+				if self.use_GP:
+					# This is borrowed from https://github.com/jfsantos/dragan-pytorch/blob/master/dragan.py
+					if self.gpu_mode:
+						alpha = torch.rand(x_.size()).cuda()
+						x_hat = Variable(alpha* x_.data + (1-alpha)* (x_.data + 0.5 * x_.data.std() * torch.rand(x_.size()).cuda()),
+									 requires_grad=True)
+					else:
+						alpha = torch.rand(x_.size())
+						x_hat = Variable(alpha * x_.data + (1 - alpha) * (x_.data + 0.5 * x_.data.std() * torch.rand(x_.size())),
+							requires_grad=True)
+					pred_hat = self.D(x_hat)
+					if self.gpu_mode:
+						gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
+									 create_graph=True, retain_graph=True, only_inputs=True)[0]
+					else:
+						gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
+										 create_graph=True, retain_graph=True, only_inputs=True)[0]
+	
+					gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
+	
+					D_loss = D_real_loss + D_fake_loss + gradient_penalty
+				else:
+					D_loss = D_real_loss + D_fake_loss
 				D_loss.backward()
+				self.train_hist['D_loss'].append(D_loss.data[0])
 
 				# D gets updated only if its accuracy is below 80%
 				D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
-				if D_acc < 0.8:
+				if D_acc < self.D_threshold:
 					self.D_optimizer.step()
 
 				# update G network
@@ -211,19 +224,27 @@ class GAN3D(object):
 				G_loss.backward()
 				self.G_optimizer.step()
 
-				if ((iter + 1) % 10) == 0:
+				if ((iB + 1) % 10) == 0:
 					secs = time.time()-start_time_epoch
 					hours = secs//3600
 					mins = secs/60%60
 					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, G_loss: %.4f, D_acc:%.4f" %
-						  (hours,mins, (epoch + 1), (iter + 1), self.data_loader.dataset.__len__() // self.batch_size,
+						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size,
 						  D_loss.data[0], G_loss.data[0], D_acc))
-					self.visualize_results((epoch+1)*1000+iter+1)
-					for iS in range(3):
-						plot_voxel( G_[iS], save_file='text_e{}i{}s{}.png'.format(epoch+1,iter+1,iS) )
+#				if iB == (self.data_loader.dataset.__len__() // self.batch_size)//2:
+#					print("dumping x_hat from iB {}".format(iB))
+#					self.dump_x_hat(epoch+1,iB)
+#					for iS in range(1):
+#						filename = os.path.join( self.result_dir, self.dataset, self.model_name,
+#										self.model_name+'_train_e%02d_i%d_sample%d.png'%(epoch,iB+1,iS))
+#						plot_voxel( np.squeeze(G_[iS].data.cpu().numpy())>0.5, save_file=filename )
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
-			self.visualize_results((epoch+1))
+			print("dumping x_hat from epoch {}".format(epoch+1))
+			self.dump_x_hat((epoch+1))
+#			self.visualize_results((epoch+1))
+			self.save()
+			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 		self.train_hist['total_time'].append(time.time() - start_time)
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -231,8 +252,37 @@ class GAN3D(object):
 		print("Training finish!... save training results")
 
 		self.save()
-		utils.generate_animation(self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name, self.epoch)
+#		utils.generate_animation(self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name, self.epoch)
 		utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
+
+	def dump_x_hat(self, epoch, iB=0, fix=True):
+		self.G.eval()
+
+		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
+			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
+
+		if fix:
+			""" fixed noise """
+			samples = self.G(self.sample_z_)
+		else:
+			""" random noise """
+			if self.gpu_mode:
+				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
+			else:
+				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
+
+			samples = self.G(sample_z_)
+
+
+		if self.gpu_mode:
+			samples = samples.cpu().data.numpy().squeeze()
+		else:
+			samples = samples.data.numpy().squeeze()
+
+		fname = os.path.join( self.result_dir, self.dataset, self.model_name,
+										self.model_name+'_E%03d_B%03d.npy'%(epoch,iB))
+		samples.dump(fname)
+
 
 	def visualize_results(self, epoch, fix=True):
 		self.G.eval()
@@ -242,7 +292,7 @@ class GAN3D(object):
 
 		if fix:
 			""" fixed noise """
-			samples = self.G(self.sample_z_).squeeze()
+			samples = self.G(self.sample_z_)
 		else:
 			""" random noise """
 			if self.gpu_mode:
@@ -250,15 +300,16 @@ class GAN3D(object):
 			else:
 				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
 
-			samples = self.G(sample_z_).squeeze()
+			samples = self.G(sample_z_)
+
+		samples = samples>0.5
 
 		if self.gpu_mode:
-			samples = samples.cpu().data.numpy()
+			samples = samples.cpu().data.numpy().squeeze()
 		else:
-			samples = samples.data.numpy()
+			samples = samples.data.numpy().squeeze()
 
-		#for i in range( self.batch_size ):
-		for i in range( 5 ):
+		for i in range( self.batch_size ):
 			filename = os.path.join( self.result_dir, self.dataset, self.model_name,
 										self.model_name+'_e%03d_sample%02d.png'%(epoch,i))
 			plot_voxel( samples[i] , save_file=filename )
