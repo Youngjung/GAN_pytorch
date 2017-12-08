@@ -163,6 +163,7 @@ class ShapeNet( Dataset ):
 		# convert word to synsetID
 		if not synsetId.isdigit():
 			synsetId = wordnet[synsetId]
+			print( 'synsetId = {}'.format(synsetId) )
 
 		# read shapenet split
 		fname_cache = 'cache_ShapeNet.csv'
@@ -204,11 +205,12 @@ class ShapeNet( Dataset ):
 		path_sample = os.path.join( self.root_dir, 'ShapeNetCore.v2', data['synsetId'], data['modelId'] )
 		path_binvox = os.path.join( path_sample, 'models', 'model_normalized.solid.binvox' )
 		voxel_data = read_binvox( path_binvox )
+		voxel_data = np.expand_dims(voxel_data,0)
 #		plot_voxel( voxel_data, save_file='sample_{}.png'.format(idx) )
 
 		if self.transform:
 			voxel_data = self.transform(voxel_data)
-		voxel_data = voxel_data.unsqueeze(0)
+		voxel_data = torch.Tensor( voxel_data )
 		labels = { 'id': data['id'],
 					'synsetId': data['synsetId'] }
 		return voxel_data, labels 
@@ -293,6 +295,10 @@ def initialize_weights(net):
         elif isinstance(m, nn.ConvTranspose2d):
             m.weight.data.normal_(0, 0.02)
             m.bias.data.zero_()
+        elif isinstance(m, nn.Conv3d):
+            nn.init.xavier_uniform(m.weight)
+        elif isinstance(m, nn.ConvTranspose3d):
+            nn.init.xavier_uniform(m.weight)
         elif isinstance(m, nn.Linear):
             m.weight.data.normal_(0, 0.02)
             m.bias.data.zero_()
