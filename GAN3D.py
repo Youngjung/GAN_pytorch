@@ -309,7 +309,7 @@ class GAN3D(object):
 		else:
 			samples = samples.data.numpy().squeeze()
 
-		for i in range( self.batch_size ):
+		for i in range( self.test_sample_size ):
 			filename = os.path.join( self.result_dir, self.dataset, self.model_name,
 										self.model_name+'_e%03d_sample%02d.png'%(epoch,i))
 			plot_voxel( samples[i] , save_file=filename )
