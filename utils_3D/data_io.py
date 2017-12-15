@@ -8,6 +8,32 @@ import scipy.ndimage as nd
 import h5py
 import binvox_rw
 
+def read_bnt(path, shape=(64,64,64)):
+    with open(path, 'rb') as f:
+		nrows	= f.read(2)
+		ncols	= f.read(2)
+		zmin	= f.read(8)
+		length	= f.read(2)
+		imfile	= f.read(length)
+		length	= f.read(4)
+		pcl		= f.read(length)
+		pcl		= np.array(pcl).resize(nrows,ncols)
+    
+	xmax = 150
+	xmin = -150
+	ymax = 150
+	ymin = -150
+	zmax = 230
+	zmin = -200
+	raw_shape = (xmax-xmin,ymax-ymin,zmax-zmin)
+	voxel_data = np.array(raw_shape)
+	for i in range(pcl.shape(0)):
+		x,y,z,_,_ = pcl[i]
+		voxel_data[x,y,z] = 1
+    if shape is not None and voxel_data.shape != shape:
+        voxel_data = resize(voxel_data, shape)
+	return voxel_data
+
 def read_h5(path):
     """
     read .h5 file
@@ -18,11 +44,14 @@ def read_h5(path):
 
     return voxel
 
-def resize(voxel, shape):
+def resize(voxel, shape, square=True):
     """
     resize voxel shape
     """
-    ratio = float(shape[0]) / voxel.shape[0]
+	if square:
+	    ratio = float(shape[0]) / voxel.shape[0]
+	else:
+	    ratio = [float(s)/v for (s,v) in zip(shape,voxel.shape)]
     voxel = nd.zoom(voxel,
             ratio,
             order=1, 

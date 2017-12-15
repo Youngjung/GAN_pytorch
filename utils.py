@@ -11,7 +11,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 
-from utils_3D.data_io import read_binvox
+from utils_3D.data_io import read_binvox, read_bnt
 from utils_3D.visualize import plot_voxel
 
 import pdb
@@ -74,6 +74,47 @@ def CustomDataLoader(path, transform, batch_size, shuffle):
     data_loader = torch.utils.data.DataLoader(dset, batch_size, shuffle)
 
     return data_loader
+
+class Bosphorus( Dataset ):
+	def __init__( self, root_dir, transform=None):
+		self.root_dir = root_dir
+		self.filenames = {}
+		self.transform = transform
+
+		print('Loading MultiPie metadata...', end='')
+		sys.stdout.flush()
+		time_start = time.time()
+
+		fname_cache = 'cache_bosphorus.txt'
+		if os.path.exists(fname_cache):
+			self.filenames = open(fname_cache).read().splitlines()
+			print( 'restored from {}'.format(fname_cache) )
+		else:
+			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(root_dir)
+							for f in files if f.endswith('_trim.bnt') ] 
+	
+			print('{:.0f}sec, {} files found.'.format( time.time()-time_start, len(self.filenames)))
+	
+			with open(fname_cache, 'w') as f:
+				for fname in self.filenames:
+					f.write(fname+'\n')
+			print( 'cached in {}'.format(fname_cache) )
+	
+	def __len__( self ):
+		return len( self.dict_list )
+	
+	def __getitem__( self, idx ):
+		basename = os.path.basename( self.filenames[idx] )
+		identity, poseclass, posecode, samplenum =  basename[:-4].split('_')
+		pcl, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
+		assert( imfile == (basename[:-3]+'png') )
+		image = Image.open( self.filenames[idx][:-3]+'png' )
+		if self.transform:
+			image = self.transform(image)
+		labels = { 'id': identity,
+					'pclass': poseclass,
+					'pcode': posecode }
+		return image, pcl, labels 
 
 class MultiPie( Dataset ):
 	def __init__( self, root_dir, transform=None, cam_ids=None):
