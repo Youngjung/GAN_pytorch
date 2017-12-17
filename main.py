@@ -22,7 +22,7 @@ def parse_args():
                         choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE', 'GAN3D'],
                         help='The type of GAN')#, required=True)
     parser.add_argument('--dataset', type=str, default='mnist', 
-						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet'],
+						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus'],
                         help='The name of dataset')
     parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
     parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')

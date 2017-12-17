@@ -124,6 +124,11 @@ class GAN3D(object):
 		if self.dataset == 'ShapeNet':
 			self.data_loader = DataLoader( utils.ShapeNet(data_dir),
 											batch_size=self.batch_size, shuffle=True)
+		elif self.dataset == 'Bosphorus':
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir),
+											batch_size=self.batch_size, shuffle=True)
+		else:
+			exit("unknown dataset: " + self.dataset)
 
 		self.z_dim = 200
 
@@ -156,12 +161,15 @@ class GAN3D(object):
 			epoch_start_time = time.time()
 			self.G.train()
 			start_time_epoch = time.time()
-			for iB, (x_, _) in enumerate(self.data_loader):
+			for iB, (x_, _, _) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
 #				z_ = torch.rand((self.batch_size, self.z_dim))
 				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
+				
+				#x_.numpy().dump('Bosphorus_temp/samples.npy')
+				#pdb.set_trace()
 
 				if self.gpu_mode:
 					x_, z_ = Variable(x_.cuda()), Variable(z_.cuda())

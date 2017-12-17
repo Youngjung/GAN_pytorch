@@ -80,18 +80,19 @@ class Bosphorus( Dataset ):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
+		self.suffix = '_trim.bnt'
 
-		print('Loading MultiPie metadata...', end='')
+		print('Loading Bosphorus metadata...', end='')
 		sys.stdout.flush()
 		time_start = time.time()
 
-		fname_cache = 'cache_bosphorus.txt'
+		fname_cache = 'cache_Bosphorus.txt'
 		if os.path.exists(fname_cache):
 			self.filenames = open(fname_cache).read().splitlines()
 			print( 'restored from {}'.format(fname_cache) )
 		else:
 			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(root_dir)
-							for f in files if f.endswith('_trim.bnt') ] 
+							for f in files if f.endswith(self.suffix) ] 
 	
 			print('{:.0f}sec, {} files found.'.format( time.time()-time_start, len(self.filenames)))
 	
@@ -101,20 +102,23 @@ class Bosphorus( Dataset ):
 			print( 'cached in {}'.format(fname_cache) )
 	
 	def __len__( self ):
-		return len( self.dict_list )
+		return len( self.filenames )
 	
-	def __getitem__( self, idx ):
+	def __getitem__( self, idx, use_image = False ):
 		basename = os.path.basename( self.filenames[idx] )
-		identity, poseclass, posecode, samplenum =  basename[:-4].split('_')
+		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
 		pcl, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
-		assert( imfile == (basename[:-3]+'png') )
-		image = Image.open( self.filenames[idx][:-3]+'png' )
-		if self.transform:
-			image = self.transform(image)
+		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
+		image = torch.zeros(1,1) 
+		if use_image:
+			image = Image.open( self.filenames[idx][:-len(self.suffix)]+'.png' )
+			if self.transform:
+				image = self.transform(image)
+		pcl = torch.Tensor( pcl )
 		labels = { 'id': identity,
 					'pclass': poseclass,
 					'pcode': posecode }
-		return image, pcl, labels 
+		return pcl, labels, image
 
 class MultiPie( Dataset ):
 	def __init__( self, root_dir, transform=None, cam_ids=None):
