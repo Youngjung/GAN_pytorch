@@ -14,6 +14,7 @@ def parse_opts():
 	parser.add_argument('--epoch_from', type=int, default=0, help='epoch to start plotting from')
 	parser.add_argument('--epoch_to', type=int, default=-1, help='epoch to end plotting')
 	parser.add_argument('--epoch_every', type=int, default=1, help='plot every N epochs')
+	parser.add_argument('--fname', type=str, default='', help='single file to visualize')
  
 	return check_opts(parser.parse_args())
 
@@ -28,15 +29,23 @@ def main():
 		exit()
 	vis = visdom.Visdom()
 	
-	fnames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(opts.dir_npy)
+	if len(opts.fname)>0:
+		fnames = [opts.fname]
+	else:
+		fnames = [os.path.join(dirpath,f) \
+					for dirpath, dirnames, files in os.walk(opts.dir_npy)
 							for f in files if f.endswith('.npy') ]
-	fnames.sort()
+		fnames.sort()
 	if opts.epoch_to < 0:
 		opts.epoch_to = len(fnames)
 	for iF in range(len(fnames)//opts.epoch_every):
 		fname = fnames[iF*opts.epoch_every]
 		print( 'loading from {}'.format(fname) )
-		epoch = int(fname[-12:-9])
+		try:
+			epoch = int(fname[-12:-9])
+		except:
+			print('ignoring epoch...'+fname)
+			epoch=opts.epoch_from
 		if epoch < opts.epoch_from or opts.epoch_to < epoch:
 			continue
 		g_objects = np.load(fname)
