@@ -11,7 +11,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 
-from utils_3D.data_io import read_binvox, read_bnt
+from utils_3D.data_io import read_binvox, read_bnt, bnt2voxel
 from utils_3D.visualize import plot_voxel
 
 import pdb
@@ -107,7 +107,9 @@ class Bosphorus( Dataset ):
 	def __getitem__( self, idx, use_image = False ):
 		basename = os.path.basename( self.filenames[idx] )
 		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
-		pcl, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
+		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
+		pcl = bnt2voxel( bnt_data )
+		pcl = np.expand_dims(pcl,0)
 		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
 		image = torch.zeros(1,1) 
 		if use_image:
@@ -197,17 +199,19 @@ class ShapeNet( Dataset ):
 		self.root_dir = root_dir
 		self.transform = transform
 
-		# read wordnet
-		wordnet = {}
-		with open('words.txt') as f_wordnet:
-			for line in f_wordnet:
-				tokens = line[:-1].split('\t')
-				if not tokens[1] in wordnet:
-					wordnet[ tokens[1] ] = tokens[0][1:]
-
 		# convert word to synsetID
 		if not synsetId.isdigit():
-			synsetId = wordnet[synsetId]
+			# read wordnet
+			wordnet = {}
+			with open('words.txt') as f_wordnet:
+				for line in f_wordnet:
+					tokens = line[:-1].split('\t')
+					if not tokens[1] in wordnet:
+						wordnet[ tokens[1] ] = tokens[0][1:]
+			try:
+				synsetId = wordnet[synsetId]
+			except:
+				exit( 'synsetId {} is not found in wordnet'.format(synsetId) )
 			print( 'synsetId = {}'.format(synsetId) )
 
 		# read shapenet split
