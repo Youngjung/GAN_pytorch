@@ -11,12 +11,6 @@ import struct
 
 import pdb
 
-def convert(s):
-	i = int(s, 16)                   # convert from hex to a Python int
-	cp = pointer(c_int(i))           # make this into a c integer
-	fp = cast(cp, POINTER(c_float))  # cast the int pointer to a float 
-	return fp.contents.value         # dereference the pointer, get the float
-
 def read_bnt(path, shape=(128,128,128)):
 	with open(path, 'rb') as f:
 		nrows	= struct.unpack('h',f.read(2))[0]

@@ -120,7 +120,10 @@ class Bosphorus( Dataset ):
 		labels = { 'id': identity,
 					'pclass': poseclass,
 					'pcode': posecode }
-		return pcl, labels, image
+		if use_image:
+			return pcl, labels, image
+		else:
+			return pcl, labels
 
 class MultiPie( Dataset ):
 	def __init__( self, root_dir, transform=None, cam_ids=None):
