@@ -20,6 +20,13 @@ class generator(nn.Module):
 			self.input_depth = 64
 			self.input_dim = 200
 			self.output_dim = 1
+		elif dataset == 'Bosphorus':
+			self.input_height = 128
+			self.input_width = 128
+			self.input_depth = 128
+			self.input_dim = 200
+			self.output_dim = 1
+
 
 		self.deconv = nn.Sequential(
 			nn.ConvTranspose3d(200, 512, 4, bias=False),
@@ -35,7 +42,6 @@ class generator(nn.Module):
 			nn.BatchNorm3d(64),
 			nn.ReLU(),
 			nn.ConvTranspose3d(64, 1, 4, 2, 1, bias=False),
-#			nn.Tanh()
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
@@ -98,6 +104,8 @@ class GAN3D(object):
 		self.model_name = args.gan_type
 		if self.use_GP:
 			self.model_name = self.model_name + '_GP'
+		if len(args.comment) > 0:
+			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
 		self.D_threshold = 0.8
 
@@ -122,7 +130,7 @@ class GAN3D(object):
 		# load dataset
 		data_dir = os.path.join( self.dataroot_dir, self.dataset )
 		if self.dataset == 'ShapeNet':
-			self.data_loader = DataLoader( utils.ShapeNet(data_dir),
+			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
 											batch_size=self.batch_size, shuffle=True)
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir),
@@ -161,7 +169,7 @@ class GAN3D(object):
 			epoch_start_time = time.time()
 			self.G.train()
 			start_time_epoch = time.time()
-			for iB, (x_, _, _) in enumerate(self.data_loader):
+			for iB, (x_, _) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
@@ -169,7 +177,6 @@ class GAN3D(object):
 				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
 				
 				#x_.numpy().dump('Bosphorus_temp/samples.npy')
-				#pdb.set_trace()
 
 				if self.gpu_mode:
 					x_, z_ = Variable(x_.cuda()), Variable(z_.cuda())
