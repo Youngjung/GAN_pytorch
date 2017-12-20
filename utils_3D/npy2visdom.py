@@ -52,7 +52,7 @@ def main():
 	
 #	id_ch = np.random.randint(0, batch_size, 4)
 		id_ch = [0,1,2,3]
-		for i in range(4):
+		for i in range(min(4,g_objects.shape[0])):
 			if g_objects[id_ch[i]].max() > 0.5:
 				print( 'plotting epoch {} sample {}...'.format(fname, i) )
 				dataIO.plotVoxelVisdom(np.squeeze(g_objects[id_ch[i]]>0.5), vis, '_'.join(map(str,[epoch,i])))
