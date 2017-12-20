@@ -28,24 +28,28 @@ def read_bnt(path, shape=(128,128,128)):
 		pcl		= struct.unpack('d'*length,f.read(length*8))
 		pcl		= np.array(pcl).reshape(5,length/5).transpose()
 	
-	xmax = 200 
-	xmin = -200
-	ymax = 200
-	ymin = -200
-	zmax = 300
-	zmin = -300
+	return pcl, nrows, ncols, imfile
+
+def bnt2voxel(pcl,shape=(64,64,64),xmax=200, xmin=-200, ymax=200, ymin=-200, zmax=300, zmin=-300):
 	raw_shape = (xmax-xmin+1,ymax-ymin+1,zmax-zmin+1)
-	voxel_data = np.zeros(raw_shape)
+	voxel = np.zeros(shape)
+	ratio = [float(s)/v for (s,v) in zip(shape,raw_shape)]
+	try:
+		minminz = int((min(pcl[:,2])-zmin)*ratio[2])
+	except:
+		pdb.set_trace()
+
 	for i in range(pcl.shape[0]):
 		x,y,z,_,_ = pcl[i]
 		try:
-			voxel_data[int(x)-xmin,int(y)-ymin,int(z)-zmin] = 1
+			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
+			voxel[int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = 1
 		except:
 			print( x,y,z )
 			print( int(x)-xmin,int(y)-ymin,int(z)-zmin )
-	if shape is not None and voxel_data.shape != shape:
-		voxel_data = resize(voxel_data, shape)
-	return voxel_data, nrows, ncols, imfile
+#	np.expand_dims(voxel,0).dump('Bosphorus_temp/voxel_data_resized.npy')
+#	pdb.set_trace()
+	return voxel
 
 def read_h5(path):
 	"""
