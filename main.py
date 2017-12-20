@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument('--dataset', type=str, default='mnist', 
 						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus'],
                         help='The name of dataset')
+    parser.add_argument('--synsetId', type=str, default='chair', help='synsetId of ShapeNet')
     parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
     parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')
     parser.add_argument('--batch_size', type=int, default=64, help='The size of batch')
@@ -40,6 +41,7 @@ def parse_args():
     parser.add_argument('--beta2', type=float, default=0.999)
     parser.add_argument('--gpu_mode', type=bool, default=True)
     parser.add_argument('--use_GP', type=bool, default=False, help='use Gradient Penalty')
+    parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
 
     return check_args(parser.parse_args())
 
