@@ -131,10 +131,10 @@ class GAN3D(object):
 		data_dir = os.path.join( self.dataroot_dir, self.dataset )
 		if self.dataset == 'ShapeNet':
 			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
-											batch_size=self.batch_size, shuffle=True)
+											batch_size=self.batch_size, shuffle=True, num_workers=8)
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir),
-											batch_size=self.batch_size, shuffle=True)
+											batch_size=self.batch_size, shuffle=True, num_workers=8))
 		else:
 			exit("unknown dataset: " + self.dataset)
 
