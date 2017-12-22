@@ -202,6 +202,8 @@ class ShapeNet( Dataset ):
 		self.root_dir = root_dir
 		self.transform = transform
 
+		fname_cache = 'cache_ShapeNet_'+synsetId+'.csv'
+
 		# convert word to synsetID
 		if not synsetId.isdigit():
 			# read wordnet
@@ -218,7 +220,6 @@ class ShapeNet( Dataset ):
 			print( 'synsetId = {}'.format(synsetId) )
 
 		# read shapenet split
-		fname_cache = 'cache_ShapeNet.csv'
 		if os.path.exists(fname_cache):
 			with open(fname_cache) as f:
 				reader = csv.DictReader(f)
