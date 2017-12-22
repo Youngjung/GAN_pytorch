@@ -15,6 +15,7 @@ def parse_opts():
 	parser.add_argument('--epoch_to', type=int, default=-1, help='epoch to end plotting')
 	parser.add_argument('--epoch_every', type=int, default=1, help='plot every N epochs')
 	parser.add_argument('--fname', type=str, default='', help='single file to visualize')
+	parser.add_argument('--port', type=int, default='8097', help='port to use')
  
 	return check_opts(parser.parse_args())
 
@@ -27,7 +28,7 @@ def main():
 	opts = parse_opts()
 	if opts is None:
 		exit()
-	vis = visdom.Visdom()
+	vis = visdom.Visdom(port=opts.port)
 	
 	if len(opts.fname)>0:
 		fnames = [opts.fname]
