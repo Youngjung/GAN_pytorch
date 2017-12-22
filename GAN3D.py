@@ -134,7 +134,7 @@ class GAN3D(object):
 											batch_size=self.batch_size, shuffle=True, num_workers=8)
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir),
-											batch_size=self.batch_size, shuffle=True, num_workers=8))
+											batch_size=self.batch_size, shuffle=True, num_workers=8)
 		else:
 			exit("unknown dataset: " + self.dataset)
 
