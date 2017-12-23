@@ -3,6 +3,7 @@ python main.py \
  --gan_type GAN3D \
  --dataset ShapeNet \
  --synsetId chair \
+ --comment chair \
  --batch_size 64 \
  --test_sample_size 16 \
  --lrG 0.0025 \
