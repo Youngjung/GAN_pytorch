@@ -62,6 +62,10 @@ def check_args(opts):
 
 	if len(opts.comment)>0:
 		print( "comment: " + opts.comment )
+		tempconcat = opts.gan_type + '_' + opts.comment
+
+	print( 'models and loss plot -> ' + os.path.join( opts.save_dir, opts.dataset, tempconcat ) )
+	print( 'results -> ' + os.path.join( opts.result_dir, opts.dataset, tempconcat ) )
 
 	# --epoch
 	try:
@@ -76,9 +80,11 @@ def check_args(opts):
 		print('batch size must be larger than or equal to one')
 
 	try:
-		assert not ((opts.gan_type=='GAN3D') ^ (opts.dataset=='ShapeNet'))
+		assert not ( (opts.gan_type=='GAN3D') ^
+					 (opts.dataset in ('ShapeNet','Bosphorus'))
+				   )
 	except:
-		print( '--gan_type=GAN3D and --dataset=ShapeNet should be used together' )
+		exit( '--gan_type=GAN3D and --dataset=ShapeNet or Bosphorus should be used together' )
 
 	return opts
 

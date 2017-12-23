@@ -76,11 +76,12 @@ def CustomDataLoader(path, transform, batch_size, shuffle):
     return data_loader
 
 class Bosphorus( Dataset ):
-	def __init__( self, root_dir, transform=None):
+	def __init__( self, root_dir, transform=None, use_image = False):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
 		self.suffix = '_trim.bnt'
+		self.use_image = use_image
 
 		print('Loading Bosphorus metadata...', end='')
 		sys.stdout.flush()
@@ -89,7 +90,7 @@ class Bosphorus( Dataset ):
 		fname_cache = 'cache_Bosphorus.txt'
 		if os.path.exists(fname_cache):
 			self.filenames = open(fname_cache).read().splitlines()
-			print( 'restored from {}'.format(fname_cache) )
+			print( '{} samples restored from {}'.format(len(self.filenames),fname_cache) )
 		else:
 			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(root_dir)
 							for f in files if f.endswith(self.suffix) ] 
@@ -104,7 +105,7 @@ class Bosphorus( Dataset ):
 	def __len__( self ):
 		return len( self.filenames )
 	
-	def __getitem__( self, idx, use_image = False ):
+	def __getitem__( self, idx ):
 		basename = os.path.basename( self.filenames[idx] )
 		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
 		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
@@ -112,7 +113,7 @@ class Bosphorus( Dataset ):
 		pcl = np.expand_dims(pcl,0)
 		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
 		image = torch.zeros(1,1) 
-		if use_image:
+		if self.use_image:
 			image = Image.open( self.filenames[idx][:-len(self.suffix)]+'.png' )
 			if self.transform:
 				image = self.transform(image)
@@ -120,7 +121,7 @@ class Bosphorus( Dataset ):
 		labels = { 'id': identity,
 					'pclass': poseclass,
 					'pcode': posecode }
-		if use_image:
+		if self.use_image:
 			return pcl, labels, image
 		else:
 			return pcl, labels

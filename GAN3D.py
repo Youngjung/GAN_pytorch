@@ -21,9 +21,9 @@ class generator(nn.Module):
 			self.input_dim = 200
 			self.output_dim = 1
 		elif dataset == 'Bosphorus':
-			self.input_height = 128
-			self.input_width = 128
-			self.input_depth = 128
+			self.input_height = 64
+			self.input_width = 64
+			self.input_depth = 64
 			self.input_dim = 200
 			self.output_dim = 1
 
@@ -62,6 +62,12 @@ class discriminator(nn.Module):
 			self.input_width = 64
 			self.input_depth = 64
 			self.input_dim = 1
+			self.output_dim = 1
+		elif dataset == 'Bosphorus':
+			self.input_height = 64
+			self.input_width = 64
+			self.input_depth = 64
+			self.input_dim = 200
 			self.output_dim = 1
 
 		self.conv = nn.Sequential(
