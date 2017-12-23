@@ -102,6 +102,7 @@ class GAN3D(object):
 		self.gpu_mode = args.gpu_mode
 		self.use_GP = args.use_GP
 		self.model_name = args.gan_type
+		self.num_workers = args.num_workers
 		if self.use_GP:
 			self.model_name = self.model_name + '_GP'
 		if len(args.comment) > 0:
@@ -131,10 +132,10 @@ class GAN3D(object):
 		data_dir = os.path.join( self.dataroot_dir, self.dataset )
 		if self.dataset == 'ShapeNet':
 			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
-											batch_size=self.batch_size, shuffle=True, num_workers=8)
+											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir),
-											batch_size=self.batch_size, shuffle=True, num_workers=8)
+											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		else:
 			exit("unknown dataset: " + self.dataset)
 

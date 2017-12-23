@@ -41,6 +41,7 @@ def parse_args():
 	parser.add_argument('--beta2', type=float, default=0.999)
 	parser.add_argument('--gpu_mode', type=bool, default=True)
 	parser.add_argument('--use_GP', type=bool, default=False, help='use Gradient Penalty')
+	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
 
 	return check_args(parser.parse_args())
