@@ -26,6 +26,11 @@ def read_bnt(path, shape=(128,128,128)):
 
 def bnt2voxel(pcl,shape=(64,64,64),xmax=200, xmin=-200, ymax=200, ymin=-200, zmax=300, zmin=-300):
 	raw_shape = (xmax-xmin+1,ymax-ymin+1,zmax-zmin+1)
+	maxs = pcl[:,:3].max(0)
+	mins = pcl[:,:3].min(0)
+	xmax, ymax, zmax = maxs
+	xmin, ymin, zmin = mins
+	raw_shape = [m-n+1 for m,n in zip(maxs,mins)]
 	voxel = np.zeros(shape)
 	ratio = [float(s)/v for (s,v) in zip(shape,raw_shape)]
 	try:
