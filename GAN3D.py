@@ -6,7 +6,7 @@ from torch.autograd import Variable, grad
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from utils_3D.visualize import plot_voxel
+from utils3D.visualize import plot_voxel
 import pdb
 
 class generator(nn.Module):

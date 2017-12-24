@@ -11,8 +11,8 @@ from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 
-from utils_3D.data_io import read_binvox, read_bnt, bnt2voxel
-from utils_3D.visualize import plot_voxel
+from utils3D.data_io import read_binvox, read_bnt, bnt2voxel
+from utils3D.visualize import plot_voxel
 
 import pdb
 
