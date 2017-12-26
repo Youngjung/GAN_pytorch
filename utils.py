@@ -140,7 +140,6 @@ class Bosphorus( Dataset ):
 		pcl = bnt2voxel( bnt_data )
 		pcl = np.expand_dims(pcl,0)
 		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
-		image = torch.zeros(1,1) 
 		if self.use_image:
 			image = Image.open( self.filenames[idx][:-len(self.suffix)]+'.png' )
 			if self.transform:
