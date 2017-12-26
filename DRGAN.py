@@ -201,6 +201,8 @@ class DRGAN(object):
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
 		self.model_name = args.gan_type
+		if len(args.comment) > 0:
+			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
@@ -267,16 +269,18 @@ class DRGAN(object):
 		sample_x_s = []
 		for iB, (sample_x_,sample_y_) in enumerate(self.data_loader):
 			sample_x_s.append( sample_x_ )
+			break
 			if iB > nSamples // self.batch_size:
 				break
+		sample_x_s = [sample_x_s[0][0].unsqueeze(0)]*nSamples
 		self.sample_x_ = torch.cat( sample_x_s )[:nSamples,:,:,:]
 		self.sample_pose_ = torch.zeros( nSamples, self.Np )
 		self.sample_illum_ = torch.zeros( nSamples, self.Ni )
 		for iS in range( self.Np*self.Ni ):
-			i = iS%self.Ni
-			p = iS//self.Ni
-			self.sample_pose_[iS,p] = 1
-			self.sample_illum_[iS,i] = 1
+			ii = iS%self.Ni
+			ip = iS//self.Ni
+			self.sample_pose_[iS,ip] = 1
+			self.sample_illum_[iS,ii] = 1
 		self.sample_z_ = torch.rand( nSamples, self.Nz )
 
 		if self.gpu_mode:
@@ -293,7 +297,17 @@ class DRGAN(object):
 	def train(self):
 		self.train_hist = {}
 		self.train_hist['D_loss'] = []
+		self.train_hist['D_loss_GAN_real'] = []
+		self.train_hist['D_loss_id'] = []
+		self.train_hist['D_loss_pose'] = []
+		self.train_hist['D_loss_illum'] = []
+		self.train_hist['D_loss_GAN_fake'] = []
 		self.train_hist['G_loss'] = []
+		self.train_hist['G_loss'] = []
+		self.train_hist['G_loss_GAN_fake'] = []
+		self.train_hist['G_loss_id'] = []
+		self.train_hist['G_loss_pose'] = []
+		self.train_hist['G_loss_illum'] = []
 		self.train_hist['per_epoch_time'] = []
 		self.train_hist['total_time'] = []
 
@@ -310,12 +324,13 @@ class DRGAN(object):
 		for epoch in range(self.epoch):
 			self.G.train()
 			epoch_start_time = time.time()
+			start_time_epoch = time.time()
+
 			for iB, (sample_x_,sample_y_) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
 				z_ = torch.rand((self.batch_size, self.Nz))
-				#x_ = (sample_x_*2-255)/255
 				x_ = sample_x_
 				y_id_ = sample_y_['id']
 				y_pose_ = sample_y_['pose']
@@ -341,15 +356,15 @@ class DRGAN(object):
 				# update D network
 				self.D_optimizer.zero_grad()
 
-				D_GAN, D_id, D_pose, D_illum = self.D(x_)
-				D_real_loss_GAN = self.BCE_loss(D_GAN, self.y_real_)
-				D_real_loss_id = self.CE_loss(D_id, y_id_)
-				D_real_loss_pose = self.CE_loss(D_pose, y_pose_)
-				D_real_loss_illum = self.CE_loss(D_illum, y_illum_)
+				D_GAN_real, D_id, D_pose, D_illum = self.D(x_)
+				D_loss_GANreal = self.BCE_loss(D_GAN_real, self.y_real_)
+				D_loss_real_id = self.CE_loss(D_id, y_id_)
+				D_loss_real_pose = self.CE_loss(D_pose, y_pose_)
+				D_loss_real_illum = self.CE_loss(D_illum, y_illum_)
 
 				x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
-				D_fake, _, _, _ = self.D(x_hat)
-				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
+				D_GAN_fake, _, _, _ = self.D(x_hat)
+				D_loss_GANfake = self.BCE_loss(D_GAN_fake, self.y_fake_)
 
 				# DRAGAN Loss (Gradient penalty)
 				if self.gpu_mode:
@@ -370,8 +385,13 @@ class DRGAN(object):
 
 				gradient_penalty = self.lambda_ * ((gradients.view(gradients.size(0),-1).norm(2,1)-1)**2).mean()
 
-				D_loss = D_real_loss_GAN + D_real_loss_id + D_real_loss_pose + D_real_loss_illum + D_fake_loss + gradient_penalty
+				D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pose + D_loss_real_illum + D_loss_GANfake + gradient_penalty
 				self.train_hist['D_loss'].append(D_loss.data[0])
+				self.train_hist['D_loss_GAN_real'].append(D_loss_GANreal.data[0])
+				self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
+				self.train_hist['D_loss_pose'].append(D_loss_real_pose.data[0])
+				self.train_hist['D_loss_illum'].append(D_loss_real_illum.data[0])
+				self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
 
 				D_loss.backward()
 				self.D_optimizer.step()
@@ -382,23 +402,31 @@ class DRGAN(object):
 	
 					x_hat = self.G(x_, y_pose_onehot_, y_illum_onehot_, z_)
 					D_fake_GAN, D_fake_id, D_fake_pose, D_fake_illum = self.D(x_hat)
-					D_fake_loss_GAN = self.BCE_loss(D_fake_GAN, self.y_real_)
-					D_fake_loss_id = self.CE_loss(D_fake_id, y_id_)
-					D_fake_loss_pose = self.CE_loss(D_fake_pose, y_pose_)
-					D_fake_loss_illum = self.CE_loss(D_fake_illum, y_illum_)
-					G_loss = D_fake_loss_GAN + D_fake_loss_id + D_fake_loss_pose + D_fake_loss_illum
+					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
+					G_loss_id = self.CE_loss(D_fake_id, y_id_)
+					G_loss_pose = self.CE_loss(D_fake_pose, y_pose_)
+					G_loss_illum = self.CE_loss(D_fake_illum, y_illum_)
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pose + G_loss_illum
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
+						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
+						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
+						self.train_hist['G_loss_pose'].append(G_loss_pose.data[0])
+						self.train_hist['G_loss_illum'].append(G_loss_illum.data[0])
 	
 					G_loss.backward()
 					self.G_optimizer.step()
 	
 				if ((iB + 1) % 10) == 0:
-					print("Ep:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f+%.4f, G: %.4f=%.4f+%.4f" %
-						  ((epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  D_loss.data[0], D_real_loss_GAN.data[0], D_real_loss_id.data[0],
-						  D_real_loss_illum.data[0], D_fake_loss.data[0],
-						  G_loss.data[0], D_fake_loss_GAN.data[0], D_fake_loss_id.data[0]))
+					secs = time.time()-start_time_epoch
+					hours = secs//3600
+					mins = secs/60%60
+					print("%2dh%2dm E:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f+%.4f,%.4f,\n\t\t\t G: %.4f=%.4f+%.4f+%.4f+%.4f" %
+						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
+						  D_loss.data[0], D_loss_GANreal.data[0], D_loss_real_id.data[0],
+						  D_loss_real_pose.data[0], D_loss_real_illum.data[0], D_loss_GANfake.data[0],
+						  G_loss.data[0], G_loss_GANfake.data[0], G_loss_id.data[0],
+						  G_loss_pose.data[0], G_loss_illum.data[0]))
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			self.visualize_results((epoch+1))
