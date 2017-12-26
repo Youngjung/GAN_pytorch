@@ -52,6 +52,7 @@ class generator(nn.Module):
 
 		return x
 
+
 class discriminator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
@@ -93,6 +94,7 @@ class discriminator(nn.Module):
 		x = x.squeeze(4).squeeze(3).squeeze(2)
 
 		return x
+
 
 class GAN3D(object):
 	def __init__(self, args):
@@ -152,10 +154,11 @@ class GAN3D(object):
 #			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
 			self.sample_z_ = Variable( 
 						torch.normal(torch.zeros(self.test_sample_size, self.z_dim),
-						torch.ones(self.test_sample_size,self.z_dim)*0.33).cuda(),
+									 torch.ones(self.test_sample_size,self.z_dim)*0.33).cuda(),
 						volatile=True)
 		else:
 			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
+
 
 	def train(self):
 		self.train_hist = {}
@@ -165,7 +168,8 @@ class GAN3D(object):
 		self.train_hist['total_time'] = []
 
 		if self.gpu_mode:
-			self.y_real_, self.y_fake_ = Variable(torch.ones(self.batch_size, 1).cuda()), Variable(torch.zeros(self.batch_size, 1).cuda())
+			self.y_real_ = Variable(torch.ones(self.batch_size, 1).cuda())
+			self.y_fake_ = Variable(torch.zeros(self.batch_size, 1).cuda())
 		else:
 			self.y_real_, self.y_fake_ = Variable(torch.ones(self.batch_size, 1)), Variable(torch.zeros(self.batch_size, 1))
 
@@ -173,9 +177,10 @@ class GAN3D(object):
 		print('training start!!')
 		start_time = time.time()
 		for epoch in range(self.epoch):
-			epoch_start_time = time.time()
 			self.G.train()
+			epoch_start_time = time.time()
 			start_time_epoch = time.time()
+
 			for iB, (x_, _) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
@@ -183,8 +188,6 @@ class GAN3D(object):
 #				z_ = torch.rand((self.batch_size, self.z_dim))
 				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
 				
-				#x_.numpy().dump('Bosphorus_temp/samples.npy')
-
 				if self.gpu_mode:
 					x_, z_ = Variable(x_.cuda()), Variable(z_.cuda())
 				else:
@@ -253,13 +256,6 @@ class GAN3D(object):
 					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, G_loss: %.4f, D_acc:%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size,
 						  D_loss.data[0], G_loss.data[0], D_acc))
-#				if iB == (self.data_loader.dataset.__len__() // self.batch_size)//2:
-#					print("dumping x_hat from iB {}".format(iB))
-#					self.dump_x_hat(epoch+1,iB)
-#					for iS in range(1):
-#						filename = os.path.join( self.result_dir, self.dataset, self.model_name,
-#										self.model_name+'_train_e%02d_i%d_sample%d.png'%(epoch,iB+1,iS))
-#						plot_voxel( np.squeeze(G_[iS].data.cpu().numpy())>0.5, save_file=filename )
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			print("dumping x_hat from epoch {}".format(epoch+1))
