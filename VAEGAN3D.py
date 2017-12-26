@@ -385,7 +385,7 @@ class VAEGAN3D(object):
 		""" fixed image """
 		temp = self.Enc(self.sample_y_)
 		mu, sigma= Gaussian_distribution(temp)
-		reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
+		reparamZ_ = torch.normal( torch.zeros(self.test_sample_size, self.z_dim), torch.ones(self.test_sample_size,self.z_dim) )
 		if self.gpu_mode:
 			reparamZ_ = Variable(reparamZ_.cuda())
 		else:
