@@ -100,7 +100,7 @@ class IKEA(Dataset):
 
 
 class Bosphorus( Dataset ):
-	def __init__( self, root_dir, transform=None, use_image = False):
+	def __init__( self, root_dir, transform=None, use_image = False, skipCodes=[]):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
@@ -116,8 +116,12 @@ class Bosphorus( Dataset ):
 			self.filenames = open(fname_cache).read().splitlines()
 			print( '{} samples restored from {}'.format(len(self.filenames),fname_cache) )
 		else:
+			def checkCode(fname, codes):
+				identity, poseclass, posecode, samplenum =  fname[:-len(self.suffix)].split('_')
+				return poseclass not in codes
+				
 			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(root_dir)
-							for f in files if f.endswith(self.suffix) ] 
+							for f in files if f.endswith(self.suffix) and checkCode(f,skipCodes) ]
 	
 			print('{:.0f}sec, {} files found.'.format( time.time()-time_start, len(self.filenames)))
 	
