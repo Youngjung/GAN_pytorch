@@ -154,6 +154,9 @@ class VAEGAN3D(object):
 		self.lambda_ = 0.25
 		self.D_threshold = 0.8
 
+		self.alpha1 = 5
+		self.alpha2 = 0.0001
+
 		# networks init
 		self.G = generator(self.dataset)
 		self.D = discriminator(self.dataset)
@@ -315,7 +318,7 @@ class VAEGAN3D(object):
 
 				KL_div = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1) / self.batch_size
 				E_loss_MSE = self.MSE_loss( Gey_, x_ )
-				E_loss = KL_div + E_loss_MSE
+				E_loss = KL_div*self.alpha1 + E_loss_MSE*self.alpha2
 				E_loss.backward()
 				self.train_hist['E_loss'].append(E_loss.data[0])
 				self.Enc_optimizer.step()
@@ -339,7 +342,7 @@ class VAEGAN3D(object):
 
 				G_loss_GAN = self.BCE_loss(D_fake, self.y_real_)
 				G_loss_MSE = self.MSE_loss(Gey_, x_)
-				G_loss = G_loss_GAN + G_loss_MSE
+				G_loss = G_loss_GAN + G_loss_MSE*self.alpha2
 				self.train_hist['G_loss'].append(G_loss.data[0])
 
 				G_loss.backward()
