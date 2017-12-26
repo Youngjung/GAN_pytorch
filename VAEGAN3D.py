@@ -9,6 +9,13 @@ from torchvision import datasets, transforms
 from utils3D.visualize import plot_voxel
 import pdb
 
+def Gaussian_distribution(vector):
+	# input : Variable (batch_size x 400 x 1 x 1)
+	# output : two Variables (batch_size x 200)
+	mean = vector[:, :200, 0,0]
+	variance = vector[:, 200:, 0,0]
+	return mean, variance
+
 class Encoder(nn.Module):
 	def __init__(self):
 		super(Encoder,self).__init__()
@@ -36,7 +43,6 @@ class Encoder(nn.Module):
 
 	def forward(self,input):
 		x = self.conv(input)
-		# x = x.squeeze(4).squeeze(3).squeeze(2)
 		return x
 
 
@@ -151,15 +157,22 @@ class VAEGAN3D(object):
 		# networks init
 		self.G = generator(self.dataset)
 		self.D = discriminator(self.dataset)
+		self.Enc = Encoder()
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
+		self.Enc_optimizer = optim.Adam(self.Enc.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
 		if self.gpu_mode:
 			self.G.cuda()
 			self.D.cuda()
+			self.Enc.cuda()
 			self.BCE_loss = nn.BCELoss().cuda()
+			self.KL_loss = nn.KLDivLoss().cuda()
+			self.MSE_loss = nn.MSELoss().cuda()
 		else:
 			self.BCE_loss = nn.BCELoss()
+			self.KL_loss = nn.KLDivLoss()
+			self.MSE_loss = nn.MSELoss()
 
 #		print('---------- Networks architecture -------------')
 #		utils.print_network(self.G)
@@ -172,7 +185,9 @@ class VAEGAN3D(object):
 			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'Bosphorus':
-			self.data_loader = DataLoader( utils.Bosphorus(data_dir,skipCodes=['YR','PR','CR']),
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
+											transform=transforms.Compose(
+											[transforms.Resize((256,256)), transforms.ToTensor()])),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'IKEA':
 			self.transform = transforms.Compose([transforms.Scale((256, 256)), transforms.ToTensor()])
@@ -193,11 +208,6 @@ class VAEGAN3D(object):
 		else:
 			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
 
-	def Gaussian_distribution(self, vector):
-		mean = vector[0, :200, 0]
-		variance = vector[0, 200:, 0]
-		sample_z = torch.normal(mean, variance)
-		return sample_z
 
 	def train(self):
 		self.train_hist = {}
@@ -220,19 +230,21 @@ class VAEGAN3D(object):
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
 
-			for iB, (x_, _) in enumerate(self.data_loader):
+			for iB, (x_, _, y_) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
-				# z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
-				temp = self.Enc(Variable(x_))
-				z_ = self.Gaussian_distribution(temp)
-				
+				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
 				if self.gpu_mode:
-					x_, z_ = Variable(x_.cuda()), Variable(z_.cuda())
+					x_ = Variable(x_.cuda())
+					y_ = Variable(y_.cuda())
+					z_ = Variable(z_.cuda())
 				else:
-					x_, z_ = Variable(x_), Variable(z_)
+					x_ = Variable(x_)
+					y_ = Variable(y_)
+					z_ = Variable(z_)
 
+				
 				# update D network
 				self.D_optimizer.zero_grad()
 
@@ -277,13 +289,36 @@ class VAEGAN3D(object):
 				if D_acc < self.D_threshold:
 					self.D_optimizer.step()
 
+				# update Enc network
+				self.Enc_optimizer.zero_grad()
+
+				temp = self.Enc(y_)
+				mu, sigma= Gaussian_distribution(temp)
+
+				KL_div = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1)
+				KL_div.backward()
+				self.Enc_optimizer.step()
+
 				# update G network
 				self.G_optimizer.zero_grad()
 
 				G_ = self.G(z_)
 				D_fake = self.D(G_)
 
-				G_loss = self.BCE_loss(D_fake, self.y_real_)
+				temp = self.Enc(y_)
+				mu, sigma= Gaussian_distribution(temp)
+				reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
+				if self.gpu_mode:
+					reparamZ_ = Variable(reparamZ_.cuda())
+				else:
+					reparamZ_ = Variable(reparamZ_)
+
+				zey_ = mu + reparamZ_*sigma
+				Gey_ = self.G(zey_)
+
+				G_loss_GAN = self.BCE_loss(D_fake, self.y_real_)
+				G_loss_MSE = self.MSE_loss(Gey_, x_)
+				G_loss = G_loss_GAN + G_loss_MSE
 				self.train_hist['G_loss'].append(G_loss.data[0])
 
 				G_loss.backward()
