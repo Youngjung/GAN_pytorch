@@ -198,20 +198,30 @@ class VAEGAN3D(object):
 
 		self.z_dim = 200
 
-		# fixed noise
+		for iB, (sample_x_, _, sample_y_) in enumerate(self.data_loader):
+			self.sample_x_ = sample_x_
+			self.sample_y_ = sample_y_
+			break
+
+		self.sample_x_ = self.sample_x_[:self.test_sample_size,:,:,:,:]
+		self.sample_y_ = self.sample_y_[:self.test_sample_size,:,:,:]
 		if self.gpu_mode:
-#			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
+			self.sample_x_ = Variable( self.sample_x_.cuda(), volatile=True )
+			self.sample_y_ = Variable( self.sample_y_.cuda(), volatile=True )
 			self.sample_z_ = Variable( 
 						torch.normal(torch.zeros(self.test_sample_size, self.z_dim),
 									 torch.ones(self.test_sample_size,self.z_dim)*0.33).cuda(),
 						volatile=True)
 		else:
+			self.sample_x_ = Variable( self.sample_x_, volatile=True )
+			self.sample_y_ = Variable( self.sample_y_, volatile=True )
 			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
 
 
 	def train(self):
 		self.train_hist = {}
 		self.train_hist['D_loss'] = []
+		self.train_hist['E_loss'] = []
 		self.train_hist['G_loss'] = []
 		self.train_hist['per_epoch_time'] = []
 		self.train_hist['total_time'] = []
@@ -234,7 +244,7 @@ class VAEGAN3D(object):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
-				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
+				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
 				if self.gpu_mode:
 					x_ = Variable(x_.cuda())
 					y_ = Variable(y_.cuda())
@@ -294,9 +304,20 @@ class VAEGAN3D(object):
 
 				temp = self.Enc(y_)
 				mu, sigma= Gaussian_distribution(temp)
+				reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
+				if self.gpu_mode:
+					reparamZ_ = Variable(reparamZ_.cuda())
+				else:
+					reparamZ_ = Variable(reparamZ_)
 
-				KL_div = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1)
-				KL_div.backward()
+				zey_ = mu + reparamZ_*sigma
+				Gey_ = self.G(zey_)
+
+				KL_div = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1) / self.batch_size
+				E_loss_MSE = self.MSE_loss( Gey_, x_ )
+				E_loss = KL_div + E_loss_MSE
+				E_loss.backward()
+				self.train_hist['E_loss'].append(E_loss.data[0])
 				self.Enc_optimizer.step()
 
 				# update G network
@@ -328,9 +349,9 @@ class VAEGAN3D(object):
 					secs = time.time()-start_time_epoch
 					hours = secs//3600
 					mins = secs/60%60
-					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, G_loss: %.4f, D_acc:%.4f" %
+					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, E_loss: %.4f, G_loss: %.4f, D_acc:%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size,
-						  D_loss.data[0], G_loss.data[0], D_acc))
+						  D_loss.data[0], E_loss.data[0], G_loss.data[0], D_acc))
 #				if iB == (self.data_loader.dataset.__len__() // self.batch_size)//2:
 #					print("dumping x_hat from iB {}".format(iB))
 #					self.dump_x_hat(epoch+1,iB)
@@ -361,18 +382,16 @@ class VAEGAN3D(object):
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 
-		if fix:
-			""" fixed noise """
-			samples = self.G(self.sample_z_)
+		""" fixed image """
+		temp = self.Enc(self.sample_y_)
+		mu, sigma= Gaussian_distribution(temp)
+		reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
+		if self.gpu_mode:
+			reparamZ_ = Variable(reparamZ_.cuda())
 		else:
-			""" random noise """
-			if self.gpu_mode:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
-			else:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
-
-			samples = self.G(sample_z_)
-
+			reparamZ_ = Variable(reparamZ_)
+		zey_ = mu + reparamZ_*sigma
+		samples = self.G(zey_)
 
 		if self.gpu_mode:
 			samples = samples.cpu().data.numpy().squeeze()
