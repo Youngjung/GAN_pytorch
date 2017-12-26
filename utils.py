@@ -75,6 +75,30 @@ def CustomDataLoader(path, transform, batch_size, shuffle):
 
 	return data_loader
 
+
+class IKEA(Dataset):
+	def __init__(self,root_dir="data", transform=None):
+		self.filenames = []
+		self.root_dir = root_dir
+		self.transform = transform
+
+		path = os.path.join(root_dir,"3d_toolbox_notfinal","data","img")
+		#print("path :" , path)
+		self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(path)
+							for f in files if f.endswith('.jpg') ]
+		#print(self.filenames)
+	def __len__(self):
+		return len(self.filenames)
+
+	def __getitem__(self, idx):
+		basename = os.path.basename(self.filenames[idx])
+		image = Image.open(self.filenames[idx]).convert('RGB')
+		if self.transform:
+			image = self.transform(image)
+		labels = {'id': "chair"}
+		return image , labels
+
+
 class Bosphorus( Dataset ):
 	def __init__( self, root_dir, transform=None, use_image = False):
 		self.root_dir = root_dir
