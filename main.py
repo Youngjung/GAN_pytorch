@@ -12,6 +12,7 @@ from BEGAN import BEGAN
 from DRGAN import DRGAN
 from AE import AutoEncoder
 from GAN3D import GAN3D
+from VAEGAN3D import VAEGAN3D
 
 """parsing and configuration"""
 def parse_args():
@@ -19,7 +20,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description=desc)
 
 	parser.add_argument('--gan_type', type=str, default='EBGAN',
-						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE', 'GAN3D'],
+						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE', 'GAN3D', 'VAEGAN3D'],
 						help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='mnist', 
 						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus'],
@@ -122,6 +123,8 @@ def main():
 		gan = AutoEncoder(opts)
 	elif opts.gan_type == 'GAN3D':
 		gan = GAN3D(opts)
+	elif opts.gan_type == 'VAEGAN3D':
+		gan = VAEGAN3D(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
