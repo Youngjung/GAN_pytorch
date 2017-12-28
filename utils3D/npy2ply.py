@@ -18,7 +18,6 @@ def parse_opts():
 	parser.add_argument('--epoch_to', type=int, default=-1, help='epoch to end plotting')
 	parser.add_argument('--epoch_every', type=int, default=1, help='plot every N epochs')
 	parser.add_argument('--fname', type=str, default='', help='single file to visualize')
-	parser.add_argument('--port', type=int, default='8097', help='port to use')
  
 	return check_opts(parser.parse_args())
 
@@ -31,20 +30,22 @@ def main():
 	opts = parse_opts()
 	if opts is None:
 		exit()
-	vis = visdom.Visdom(port=opts.port)
 	
 	if len(opts.fname)>0:
 		fnames = [opts.fname]
+		try:
+			opts.epoch_to = int(opts.fname[-12:-9])
+		except:
+			print('ignoring epoch...'+opts.fname)
 	else:
 		fnames = [os.path.join(dirpath,f) \
 					for dirpath, dirnames, files in os.walk(opts.dir_npy)
 							for f in files if f.endswith('.npy') ]
 		fnames.sort()
-	if opts.epoch_to < 0:
-		opts.epoch_to = len(fnames)
 	for iF in range(len(fnames)//opts.epoch_every):
 		fname = fnames[iF*opts.epoch_every]
 		print( 'loading from {}'.format(fname) )
+		pdb.set_trace()
 		try:
 			epoch = int(fname[-12:-9])
 			if epoch < opts.epoch_from or opts.epoch_to < epoch:
@@ -60,10 +61,14 @@ def main():
 				print( 'plotting epoch {} sample {}...'.format(epoch, i) )
 				binarized = g_objects[i]>0.5
 				ind = np.nonzero( binarized )
+				indnp = np.array(ind)
+				list_of_tuples = list(map(tuple,indnp.transpose()))
+				vertex = np.array( list_of_tuples, dtype=[('x','f4'),('y','f4'),('z','f4')])
 
 				el = PlyElement.describe( vertex, 'vertex' )
-				PlyData([el]).write(os.path.join(opts.dir_dest,'_'.join(map(str,[epoch,i]))))
-				plot_voxel(np.squeeze(), vis, os.path.join(opts.dir_dest,'_'.join(map(str,[epoch,i]))))
+				ply_filename = os.path.join(opts.dir_dest,'_'.join(map(str,[epoch,i]))) + '.ply'
+				pdb.set_trace()
+				PlyData([el]).write( ply_filename )
 			else:
 				print( 'max={}'.format(g_objects[i].max()) )
 	
