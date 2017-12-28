@@ -346,7 +346,7 @@ def generate_animation(path, num):
 		images.append(imageio.imread(img_name))
 	imageio.mimsave(path + '_generate_animation.gif', images, fps=5)
 
-def loss_plot(hist, path = 'Train_hist.png', model_name = ''):
+def loss_plot(hist, path='.', model_name='model', y_max=None ):
 	x = range(len(hist['D_loss']))
 
 	for key,value in hist.iteritems():
@@ -366,6 +366,10 @@ def loss_plot(hist, path = 'Train_hist.png', model_name = ''):
 	plt.legend(loc=4)
 	plt.grid(True)
 	plt.tight_layout()
+
+	if y_max is not None:
+		x_min, x_max, y_min, _ = plt.axis()
+		plt.axis( (x_min, x_max, -y_max/20, y_max) )
 
 	path = os.path.join(path, model_name + '_loss.png')
 
