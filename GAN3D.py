@@ -164,6 +164,7 @@ class GAN3D(object):
 		self.train_hist = {}
 		self.train_hist['D_loss'] = []
 		self.train_hist['G_loss'] = []
+		self.train_hist['D_acc'] = []
 		self.train_hist['per_epoch_time'] = []
 		self.train_hist['total_time'] = []
 
@@ -234,6 +235,7 @@ class GAN3D(object):
 
 				# D gets updated only if its accuracy is below 80%
 				D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
+				self.train_hist['D_acc'].append(D_acc)
 				if D_acc < self.D_threshold:
 					self.D_optimizer.step()
 
