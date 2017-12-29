@@ -18,6 +18,7 @@ def parse_opts():
 	parser.add_argument('--epoch_to', type=int, default=-1, help='epoch to end plotting')
 	parser.add_argument('--epoch_every', type=int, default=1, help='plot every N epochs')
 	parser.add_argument('--fname', type=str, default='', help='single file to visualize')
+	parser.add_argument('--thresh', type=float, default=0.5, help='single file to visualize')
  
 	return check_opts(parser.parse_args())
 
@@ -45,7 +46,6 @@ def main():
 	for iF in range(len(fnames)//opts.epoch_every):
 		fname = fnames[iF*opts.epoch_every]
 		print( 'loading from {}'.format(fname) )
-		pdb.set_trace()
 		try:
 			epoch = int(fname[-12:-9])
 			if epoch < opts.epoch_from or opts.epoch_to < epoch:
@@ -57,9 +57,9 @@ def main():
 		g_objects = np.load(fname)
 	
 		for i in range(g_objects.shape[0]):
-			if g_objects[i].max() > 0.5:
+			if g_objects[i].max() > opts.thresh:
 				print( 'plotting epoch {} sample {}...'.format(epoch, i) )
-				binarized = g_objects[i]>0.5
+				binarized = g_objects[i]>opts.thresh
 				ind = np.nonzero( binarized )
 				indnp = np.array(ind)
 				list_of_tuples = list(map(tuple,indnp.transpose()))
@@ -67,7 +67,6 @@ def main():
 
 				el = PlyElement.describe( vertex, 'vertex' )
 				ply_filename = os.path.join(opts.dir_dest,'_'.join(map(str,[epoch,i]))) + '.ply'
-				pdb.set_trace()
 				PlyData([el]).write( ply_filename )
 			else:
 				print( 'max={}'.format(g_objects[i].max()) )
