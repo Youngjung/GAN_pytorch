@@ -44,6 +44,8 @@ def parse_args():
 	parser.add_argument('--use_GP', type=bool, default=False, help='use Gradient Penalty')
 	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
+	parser.add_argument('--resume', type=bool, default='False', help='resume training from saved model')
+	parser.add_argument('--generate', type=bool, default='False', help='generate samples from saved model')
 
 	return check_args(parser.parse_args())
 
@@ -123,9 +125,14 @@ def main():
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
-		# launch the graph in a session
-	gan.train()
-	print(" [*] Training finished!")
+	if opts.resume or opts.generate:
+		gan.load()
+		print(" [*] Loading finished!")
+
+	# launch the graph in a session
+	if not opts.generate:
+		gan.train()
+		print(" [*] Training finished!")
 
 	# visualize learned generator
 	gan.visualize_results(opts.epoch)
