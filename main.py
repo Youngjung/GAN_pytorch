@@ -44,8 +44,8 @@ def parse_args():
 	parser.add_argument('--use_GP', type=bool, default=False, help='use Gradient Penalty')
 	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
-	parser.add_argument('--resume', type=bool, default='False', help='resume training from saved model')
-	parser.add_argument('--generate', type=bool, default='False', help='generate samples from saved model')
+	parser.add_argument('--resume', type=bool, default=False, help='resume training from saved model')
+	parser.add_argument('--generate', type=bool, default=False, help='generate samples from saved model')
 
 	return check_args(parser.parse_args())
 
@@ -68,6 +68,12 @@ def check_args(opts):
 		tempconcat = opts.gan_type + '_' + opts.comment
 	else:
 		tempconcat = opts.gan_type
+
+	if not os.path.exists( os.path.join( opts.result_dir, opts.dataset, tempconcat ) ):
+		os.makedirs( os.path.join( opts.result_dir, opts.dataset, tempconcat ) )
+
+	if not os.path.exists( os.path.join( opts.save_dir, opts.dataset, tempconcat ) ):
+		os.makedirs( os.path.join( opts.save_dir, opts.dataset, tempconcat ) )
 
 	print( 'models and loss plot -> ' + os.path.join( opts.save_dir, opts.dataset, tempconcat ) )
 	print( 'results -> ' + os.path.join( opts.result_dir, opts.dataset, tempconcat ) )

@@ -114,7 +114,7 @@ class discriminator(nn.Module):
 			nn.Conv3d(1, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(1, 64, 4, 2, 1, bias=False),
+			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(64, 128, 4, 2, 1, bias=False),
@@ -143,7 +143,7 @@ class VAEGAN3D(object):
 		# parameters
 		self.epoch = args.epoch
 		self.batch_size = args.batch_size
-		self.test_sample_size = args.test_sample_size
+		self.test_sample_size = min(args.test_sample_size, args.batch_size)
 		self.save_dir = args.save_dir
 		self.result_dir = args.result_dir
 		self.dataset = args.dataset
@@ -216,9 +216,11 @@ class VAEGAN3D(object):
 		self.sample_x_ = self.sample_x_[:self.test_sample_size,:,:,:,:]
 		self.sample_y_ = self.sample_y_[:self.test_sample_size,:,:,:]
 		for iS in range(self.test_sample_size):
-			fname = os.path.join( self.result_dir, self.dataset, self.model_name,
-										'sample_%03d.png'%(iS))
+			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
 			imageio.imwrite(fname, self.sample_y_[iS].numpy().transpose(1,2,0))
+
+		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.npy')
+		self.sample_x_.numpy().squeeze().dump( fname )
 			
 		if self.gpu_mode:
 			self.sample_x_ = Variable( self.sample_x_.cuda(), volatile=True )
@@ -234,7 +236,7 @@ class VAEGAN3D(object):
 
 
 	def train(self):
-		if self.train_hist is None:
+		if not hasattr(self, 'train_hist') :
 			self.train_hist = {}
 			self.train_hist['D_loss'] = []
 			self.train_hist['E_loss'] = []
@@ -252,7 +254,7 @@ class VAEGAN3D(object):
 		self.D.train()
 		print('training start!!')
 		start_time = time.time()
-		if self.epoch_start is None:
+		if not hasattr(self, 'epoch_start'):
 			self.epoch_start = 0
 		for epoch in range(self.epoch_start, self.epoch):
 			self.G.train()
@@ -392,8 +394,6 @@ class VAEGAN3D(object):
 	def dump_x_hat(self, epoch, fix=True):
 		self.G.eval()
 
-		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
-			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 
 		""" fixed image """
 		temp = self.Enc(self.sample_y_)
