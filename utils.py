@@ -100,12 +100,13 @@ class IKEA(Dataset):
 
 
 class Bosphorus( Dataset ):
-	def __init__( self, root_dir, transform=None, use_image = False, skipCodes=[]):
+	def __init__( self, root_dir, transform=None, use_image = False, skipCodes=[], shape=(64,64,64)):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
 		self.suffix = '_trim.bnt'
 		self.use_image = use_image
+		self.shape = shape
 
 		print('Loading Bosphorus metadata...', end='')
 		sys.stdout.flush()
@@ -137,7 +138,7 @@ class Bosphorus( Dataset ):
 		basename = os.path.basename( self.filenames[idx] )
 		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
 		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
-		pcl = bnt2voxel( bnt_data )
+		pcl = bnt2voxel( bnt_data, self.shape )
 		pcl = np.expand_dims(pcl,0)
 		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
 		if self.use_image:

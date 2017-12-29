@@ -78,7 +78,10 @@ class generator(nn.Module):
 			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
 			nn.ReLU(),
-			nn.ConvTranspose3d(64, 1, 4, 2, 1, bias=False),
+			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(32),
+			nn.ReLU(),
+			nn.ConvTranspose3d(32, 1, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
@@ -108,6 +111,9 @@ class discriminator(nn.Module):
 			self.output_dim = 1
 
 		self.conv = nn.Sequential(
+			nn.Conv3d(1, 32, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(32),
+			nn.LeakyReLU(0.2),
 			nn.Conv3d(1, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
 			nn.LeakyReLU(0.2),
@@ -190,7 +196,8 @@ class VAEGAN3D(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
 											transform=transforms.Compose(
-											[transforms.Resize((256,256)), transforms.ToTensor()])),
+											[transforms.Resize((256,256)), transforms.ToTensor()]),
+											shape=(128,128,128)),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'IKEA':
 			self.transform = transforms.Compose([transforms.Scale((256, 256)), transforms.ToTensor()])
