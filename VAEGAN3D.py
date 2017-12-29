@@ -1,4 +1,4 @@
-import utils, torch, time, os, pickle
+import utils, torch, time, os, pickle, imageio
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
@@ -208,6 +208,11 @@ class VAEGAN3D(object):
 
 		self.sample_x_ = self.sample_x_[:self.test_sample_size,:,:,:,:]
 		self.sample_y_ = self.sample_y_[:self.test_sample_size,:,:,:]
+		for iS in range(self.test_sample_size):
+			fname = os.path.join( self.result_dir, self.dataset, self.model_name,
+										'sample_%03d.png'%(iS))
+			imageio.imwrite(fname, self.sample_y_[iS].numpy().transpose(1,2,0))
+			
 		if self.gpu_mode:
 			self.sample_x_ = Variable( self.sample_x_.cuda(), volatile=True )
 			self.sample_y_ = Variable( self.sample_y_.cuda(), volatile=True )
@@ -222,13 +227,14 @@ class VAEGAN3D(object):
 
 
 	def train(self):
-		self.train_hist = {}
-		self.train_hist['D_loss'] = []
-		self.train_hist['E_loss'] = []
-		self.train_hist['G_loss'] = []
-		self.train_hist['D_acc'] = []
-		self.train_hist['per_epoch_time'] = []
-		self.train_hist['total_time'] = []
+		if self.train_hist is None:
+			self.train_hist = {}
+			self.train_hist['D_loss'] = []
+			self.train_hist['E_loss'] = []
+			self.train_hist['G_loss'] = []
+			self.train_hist['D_acc'] = []
+			self.train_hist['per_epoch_time'] = []
+			self.train_hist['total_time'] = 0
 
 		if self.gpu_mode:
 			self.y_real_ = Variable(torch.ones(self.batch_size, 1).cuda())
@@ -239,7 +245,9 @@ class VAEGAN3D(object):
 		self.D.train()
 		print('training start!!')
 		start_time = time.time()
-		for epoch in range(self.epoch):
+		if self.epoch_start is None:
+			self.epoch_start = 0
+		for epoch in range(self.epoch_start, self.epoch):
 			self.G.train()
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
@@ -357,31 +365,24 @@ class VAEGAN3D(object):
 					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, E_loss: %.4f, G_loss: %.4f, D_acc:%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size,
 						  D_loss.data[0], E_loss.data[0], G_loss.data[0], D_acc))
-#				if iB == (self.data_loader.dataset.__len__() // self.batch_size)//2:
-#					print("dumping x_hat from iB {}".format(iB))
-#					self.dump_x_hat(epoch+1,iB)
-#					for iS in range(1):
-#						filename = os.path.join( self.result_dir, self.dataset, self.model_name,
-#										self.model_name+'_train_e%02d_i%d_sample%d.png'%(epoch,iB+1,iS))
-#						plot_voxel( np.squeeze(G_[iS].data.cpu().numpy())>0.5, save_file=filename )
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			print("dumping x_hat from epoch {}".format(epoch+1))
 			self.dump_x_hat((epoch+1))
 #			self.visualize_results((epoch+1))
 			self.save()
-			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
+			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name, y_max=15)
 
-		self.train_hist['total_time'].append(time.time() - start_time)
+		self.train_hist['total_time'] = time.time() - start_time + self.train_hist['total_time']
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
-			  self.epoch, self.train_hist['total_time'][0]))
+			  self.epoch, self.train_hist['total_time']))
 		print("Training finish!... save training results")
 
 		self.save()
 #		utils.generate_animation(self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name, self.epoch)
 		utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
-	def dump_x_hat(self, epoch, iB=0, fix=True):
+	def dump_x_hat(self, epoch, fix=True):
 		self.G.eval()
 
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
@@ -404,39 +405,12 @@ class VAEGAN3D(object):
 			samples = samples.data.numpy().squeeze()
 
 		fname = os.path.join( self.result_dir, self.dataset, self.model_name,
-										self.model_name+'_E%03d_B%03d.npy'%(epoch,iB))
+										self.model_name+'_E%03d.npy'%(epoch))
 		samples.dump(fname)
 
 
-	def visualize_results(self, epoch, fix=True):
-		self.G.eval()
-
-		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
-			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-
-		if fix:
-			""" fixed noise """
-			samples = self.G(self.sample_z_)
-		else:
-			""" random noise """
-			if self.gpu_mode:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
-			else:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
-
-			samples = self.G(sample_z_)
-
-		samples = samples>0.5
-
-		if self.gpu_mode:
-			samples = samples.cpu().data.numpy().squeeze()
-		else:
-			samples = samples.data.numpy().squeeze()
-
-		for i in range( self.test_sample_size ):
-			filename = os.path.join( self.result_dir, self.dataset, self.model_name,
-										self.model_name+'_e%03d_sample%02d.png'%(epoch,i))
-			plot_voxel( samples[i] , save_file=filename )
+	def visualize_results(self, epoch):
+		self.dump_x_hat(epoch)
 
 	def save(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
@@ -454,5 +428,17 @@ class VAEGAN3D(object):
 	def load(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 
+		print( 'loading from {}...'.format(save_dir) )
 		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
 		self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
+		self.Enc.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_Enc.pkl')))
+
+		try:
+			fhandle = open(os.path.join(save_dir, self.model_name + '_history.pkl'))
+			self.train_hist = pickle.load(fhandle)
+			fhandle.close()
+			
+			self.epoch_start = len(self.train_hist['per_epoch_time'])
+			print( 'loaded epoch {}'.format(self.epoch_start) )
+		except:
+			print('history is not found and ignored')
