@@ -11,7 +11,7 @@ import struct
 
 import pdb
 
-def read_bnt(path, shape=(128,128,128)):
+def read_bnt(path):
 	with open(path, 'rb') as f:
 		nrows	= struct.unpack('h',f.read(2))[0]
 		ncols	= struct.unpack('h',f.read(2))[0]
