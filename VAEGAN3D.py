@@ -195,8 +195,7 @@ class VAEGAN3D(object):
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
-											transform=transforms.Compose(
-											[transforms.Resize((256,256)), transforms.ToTensor()]),
+											transform=transforms.ToTensor(),
 											shape=(128,128,128)),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'IKEA':
