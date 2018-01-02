@@ -131,6 +131,18 @@ class Bosphorus( Dataset ):
 					f.write(fname+'\n')
 			print( 'cached in {}'.format(fname_cache) )
 	
+		self.poseclasses = sorted( set( [ os.path.basename(f).split('_')[1]
+											for f in self.filenames ] ) )
+		self.poseclassmap = {}
+		for i, poseclass in enumerate( self.poseclasses ):
+			self.poseclassmap[poseclass] = i
+
+		self.posecodes = sorted( set( [ os.path.basename(f).split('_')[2]
+											for f in self.filenames ] ) )
+		self.posecodemap = {}
+		for i, posecode in enumerate( self.posecodes ):
+			self.posecodemap[posecode] = i
+
 	def __len__( self ):
 		return len( self.filenames )
 	
@@ -151,6 +163,13 @@ class Bosphorus( Dataset ):
 			if self.transform:
 				image = self.transform(image)
 		pcl = torch.Tensor( pcl )
+		try:
+			identity = int(identity[2:])
+			poseclass = self.poseclassmap[poseclass]
+			posecode = self.posecodemap[posecode]
+		except:
+			print( identity, poseclass, posecode )
+			exit("parsing failed")
 		labels = { 'id': identity,
 					'pclass': poseclass,
 					'pcode': posecode }
