@@ -389,7 +389,7 @@ class DRGAN3D(object):
 				G_loss_MSE = self.MSE_loss(Gey_, x_)
 				G_loss_id = self.CE_loss(D_id, y_id_)
 				G_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
-				G_loss = G_loss_GAN + G_loss_MSE*self.alpha2 + G_loss_id
+				G_loss = G_loss_GAN + G_loss_MSE*self.alpha2 + G_loss_id + G_loss_pcode
 				self.train_hist['G_loss'].append(G_loss.data[0])
 
 				G_loss.backward()
