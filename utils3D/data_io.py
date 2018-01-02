@@ -32,6 +32,8 @@ def bnt2voxel(pcl,shape=(64,64,64),fill_mass=False):
 	raw_shape = [m-n+1 for m,n in zip(maxs,mins)]
 	voxel = np.zeros(shape)
 	ratio = [float(s)/v for (s,v) in zip(shape,raw_shape)]
+	ratio_min = min(ratio)
+	ratio = [ratio_min,ratio_min,ratio_min]
 	if fill_mass:
 		try:
 			minminz = int((min(pcl[:,2])-zmin)*ratio[2])
