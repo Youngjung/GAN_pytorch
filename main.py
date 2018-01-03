@@ -64,18 +64,17 @@ def check_args(opts):
 	if not os.path.exists(opts.log_dir):
 		os.makedirs(opts.log_dir)
 
+	if opts.use_GP:
+		GPpart = "_GP"
+	else:
+		GPpart = ""
+
 	if len(opts.comment)>0:
 		print( "comment: " + opts.comment )
-		tempconcat = opts.gan_type + '_' + opts.comment
+		comment_part = "_"+opts.comment
 	else:
-		tempconcat = opts.gan_type
-
-	if not os.path.exists( os.path.join( opts.result_dir, opts.dataset, tempconcat ) ):
-		os.makedirs( os.path.join( opts.result_dir, opts.dataset, tempconcat ) )
-
-	if not os.path.exists( os.path.join( opts.save_dir, opts.dataset, tempconcat ) ):
-		os.makedirs( os.path.join( opts.save_dir, opts.dataset, tempconcat ) )
-
+		comment_part = ""
+	tempconcat = opts.gan_type+GPpart+comment_part
 	print( 'models and loss plot -> ' + os.path.join( opts.save_dir, opts.dataset, tempconcat ) )
 	print( 'results -> ' + os.path.join( opts.result_dir, opts.dataset, tempconcat ) )
 
