@@ -154,6 +154,7 @@ class DRGAN3D(object):
 
 		self.alpha1 = 5
 		self.alpha2 = 0.0001
+		self.c = 0.01
 
 		# load dataset
 		data_dir = os.path.join( self.dataroot_dir, self.dataset )
@@ -300,16 +301,16 @@ class DRGAN3D(object):
 				self.D_optimizer.zero_grad()
 
 				D_real, D_id= self.D(x_)
-				D_loss_real = -torch.mean(D_real)
-#				D_loss_real = self.BCE_loss(D_real, self.y_real_)
+#				D_loss_real = -torch.mean(D_real)
+				D_loss_real = self.BCE_loss(D_real, self.y_real_)
 				D_loss_id = self.CE_loss(D_id, y_id_)
 #				D_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
 				num_correct_real = torch.sum(D_real>0.5)
 
 				G_ = self.G(z_,None)#, y_pcode_onehot_)
 				D_fake, _ = self.D(G_)
-				D_loss_fake = torch.mean(D_fake)
-#				D_loss_fake = self.BCE_loss(D_fake, self.y_fake_)
+#				D_loss_fake = torch.mean(D_fake)
+				D_loss_fake = self.BCE_loss(D_fake, self.y_fake_)
 				num_correct_fake = torch.sum(D_fake<0.5)
 
 				""" DRAGAN Loss (Gradient penalty) """
@@ -346,6 +347,8 @@ class DRGAN3D(object):
 				self.train_hist['D_acc'].append(D_acc)
 				if D_acc < self.D_threshold:
 					self.D_optimizer.step()
+#				for p in self.D.parameters():
+#					p.data.clamp_(-self.c, self.c)
 
 				# update Enc network
 				self.Enc_optimizer.zero_grad()
@@ -388,8 +391,8 @@ class DRGAN3D(object):
 
 				D_fake, D_id = self.D(Gey_)
 
-				G_loss_GAN = torch.mean(D_fake)
-				#G_loss_GAN = self.BCE_loss(D_fake, self.y_real_)
+#				G_loss_GAN = torch.mean(D_fake)
+				G_loss_GAN = self.BCE_loss(D_fake, self.y_real_)
 				G_loss_MSE = self.MSE_loss(Gey_, x_)
 				G_loss_id = self.CE_loss(D_id, y_id_)
 #				G_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
