@@ -76,9 +76,9 @@ class generator(nn.Module):
 
 	def forward(self, fx, y_pcode_onehot):
 		fx = fx.view(-1, self.input_dim, 1,1,1 )
-		y_pcode_onehot = y_pcode_onehot.view(-1, self.Npcode, 1,1,1 )
-		x = torch.cat( (fx, y_pcode_onehot), 1 )
-		x = self.deconv(x)
+#		y_pcode_onehot = y_pcode_onehot.view(-1, self.Npcode, 1,1,1 )
+#		x = torch.cat( (fx, y_pcode_onehot), 1 )
+		x = self.deconv(fx)
 
 		return x
 
@@ -125,9 +125,9 @@ class discriminator(nn.Module):
 
 		fGAN = self.convGAN( feature ).squeeze(4).squeeze(3).squeeze(2)
 		fid = self.convID( feature ).squeeze(4).squeeze(3).squeeze(2)
-		fcode = self.convPCode( feature ).squeeze(4).squeeze(3).squeeze(2)
+		#fcode = self.convPCode( feature ).squeeze(4).squeeze(3).squeeze(2)
 
-		return fGAN, fid, fcode
+		return fGAN, fid#, fcode
 
 
 class DRGAN3D(object):
@@ -213,7 +213,7 @@ class DRGAN3D(object):
 			self.sample_y_pcode_onehot_ = Variable( self.sample_y_pcode_onehot_, volatile=True )
 
 		# networks init
-		self.G = generator(self.z_dim, self.Npcode)
+		self.G = generator(self.z_dim, 0) # self.Npcode)
 		self.D = discriminator(self.Nid, self.Npcode)
 		self.Enc = Encoder()
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
@@ -226,12 +226,10 @@ class DRGAN3D(object):
 			self.Enc.cuda()
 			self.BCE_loss = nn.BCELoss().cuda()
 			self.CE_loss = nn.CrossEntropyLoss().cuda()
-			self.KL_loss = nn.KLDivLoss().cuda()
 			self.MSE_loss = nn.MSELoss().cuda()
 		else:
 			self.BCE_loss = nn.BCELoss()
 			self.CE_loss = nn.CrossEntropyLoss()
-			self.KL_loss = nn.KLDivLoss()
 			self.MSE_loss = nn.MSELoss()
 
 #		print('---------- Networks architecture -------------')
@@ -301,15 +299,15 @@ class DRGAN3D(object):
 				# update D network
 				self.D_optimizer.zero_grad()
 
-				D_real, D_id, D_pcode = self.D(x_)
+				D_real, D_id= self.D(x_)
 				D_loss_real = -torch.mean(D_real)
 #				D_loss_real = self.BCE_loss(D_real, self.y_real_)
 				D_loss_id = self.CE_loss(D_id, y_id_)
-				D_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
+#				D_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
 				num_correct_real = torch.sum(D_real>0.5)
 
-				G_ = self.G(z_, y_pcode_onehot_)
-				D_fake, _, _ = self.D(G_)
+				G_ = self.G(z_,None)#, y_pcode_onehot_)
+				D_fake, _ = self.D(G_)
 				D_loss_fake = torch.mean(D_fake)
 #				D_loss_fake = self.BCE_loss(D_fake, self.y_fake_)
 				num_correct_fake = torch.sum(D_fake<0.5)
@@ -325,7 +323,7 @@ class DRGAN3D(object):
 						alpha = torch.rand(x_.size())
 						x_hat = Variable(alpha * x_.data + (1 - alpha) * (x_.data + 0.5 * x_.data.std() * torch.rand(x_.size())),
 							requires_grad=True)
-					pred_hat, _, _ = self.D(x_hat)
+					pred_hat, _ = self.D(x_hat)
 					if self.gpu_mode:
 						gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
 									 create_graph=True, retain_graph=True, only_inputs=True)[0]
@@ -335,9 +333,11 @@ class DRGAN3D(object):
 	
 					gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
 	
-					D_loss = D_loss_real + D_loss_id + D_loss_pcode + D_loss_fake + gradient_penalty
+					D_loss = D_loss_real + D_loss_id + D_loss_fake + gradient_penalty
+					#D_loss = D_loss_real + D_loss_id + D_loss_pcode + D_loss_fake + gradient_penalty
 				else:
-					D_loss = D_loss_real + D_loss_id + D_loss_pcode + D_loss_fake
+					D_loss = D_loss_real + D_loss_id + D_loss_fake
+					#D_loss = D_loss_real + D_loss_id + D_loss_pcode + D_loss_fake
 				D_loss.backward()
 				self.train_hist['D_loss'].append(D_loss.data[0])
 
@@ -359,10 +359,14 @@ class DRGAN3D(object):
 					reparamZ_ = Variable(reparamZ_)
 
 				zey_ = mu + reparamZ_*sigma
-				Gey_ = self.G(zey_, y_pcode_onehot_)
+				Gey_ = self.G(zey_,None) #, y_pcode_onehot_)
+				D_fake, D_fake_id = self.D(Gey_) #, y_pcode_onehot_)
 
 				KL_div = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1) / self.batch_size
 				E_loss_MSE = self.MSE_loss( Gey_, x_ )
+#				E_loss_GAN = -torch.mean( D_fake )
+#				E_loss_GAN = self.BCE_loss( D_fake, self.y_real_ )
+#				E_loss_id = self.CE_loss( D_fake_id, y_id_ )
 				E_loss = KL_div*self.alpha1 + E_loss_MSE*self.alpha2
 				E_loss.backward()
 				self.train_hist['E_loss'].append(E_loss.data[0])
@@ -380,16 +384,16 @@ class DRGAN3D(object):
 					reparamZ_ = Variable(reparamZ_)
 
 				zey_ = mu + reparamZ_*sigma
-				Gey_ = self.G(zey_, y_pcode_onehot_)
+				Gey_ = self.G(zey_,None) #, y_pcode_onehot_)
 
-				D_fake, D_id, D_pcode = self.D(Gey_)
+				D_fake, D_id = self.D(Gey_)
 
-				G_loss_GAN = -torch.mean(D_fake)
+				G_loss_GAN = torch.mean(D_fake)
 				#G_loss_GAN = self.BCE_loss(D_fake, self.y_real_)
 				G_loss_MSE = self.MSE_loss(Gey_, x_)
 				G_loss_id = self.CE_loss(D_id, y_id_)
-				G_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
-				G_loss = G_loss_GAN + G_loss_MSE*self.alpha2 + G_loss_id + G_loss_pcode
+#				G_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
+				G_loss = G_loss_GAN + G_loss_MSE*self.alpha2 + G_loss_id #+ G_loss_pcode
 				self.train_hist['G_loss'].append(G_loss.data[0])
 
 				G_loss.backward()
@@ -435,7 +439,7 @@ class DRGAN3D(object):
 		else:
 			reparamZ_ = Variable(reparamZ_)
 		zey_ = mu + reparamZ_*sigma
-		samples = self.G( zey_, self.sample_y_pcode_onehot_ )
+		samples = self.G( zey_, None ) #self.sample_y_pcode_onehot_ )
 
 		if self.gpu_mode:
 			samples = samples.cpu().data.numpy().squeeze()
