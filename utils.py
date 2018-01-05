@@ -100,13 +100,14 @@ class IKEA(Dataset):
 
 
 class Bosphorus( Dataset ):
-	def __init__( self, root_dir, transform=None, use_image = False, skipCodes=[], shape=(64,64,64)):
+	def __init__( self, root_dir, transform=None, use_image = False, skipCodes=[], shape=(64,64,64), image_shape=256):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
 		self.suffix = '_trim.bnt'
 		self.use_image = use_image
 		self.shape = shape
+		self.image_shape = image_shape
 
 		print('Loading Bosphorus metadata...', end='')
 		sys.stdout.flush()
@@ -155,10 +156,10 @@ class Bosphorus( Dataset ):
 		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
 		if self.use_image:
 			image = Image.open( self.filenames[idx][:-len(self.suffix)]+'.png' )
-			ratio = float(256)/image.size[1] # size returns (w,h), we need h (longer side)
-			image = scipy.misc.imresize( image, (256,int(ratio*image.size[0])) )
+			ratio = float(self.image_shape)/image.size[1] # size returns (w,h), we need h (longer side)
+			image = scipy.misc.imresize( image, (self.image_shape,int(ratio*image.size[0])) )
 			width = image.shape[1]
-			w = (256-width)//2
+			w = (self.image_shape-width)//2
 			image = np.pad( image, ((0,0),(w,w+width%2),(0,0)),'constant',constant_values=0 )
 			if self.transform:
 				image = self.transform(image)
