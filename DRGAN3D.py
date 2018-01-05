@@ -369,8 +369,8 @@ class DRGAN3D(object):
 				E_loss_MSE = self.MSE_loss( Gey_, x_ )
 #				E_loss_GAN = -torch.mean( D_fake )
 #				E_loss_GAN = self.BCE_loss( D_fake, self.y_real_ )
-#				E_loss_id = self.CE_loss( D_fake_id, y_id_ )
-				E_loss = KL_div*self.alpha1 + E_loss_MSE*self.alpha2
+				E_loss_id = self.CE_loss( D_fake_id, y_id_ )
+				E_loss = KL_div*self.alpha1 + E_loss_MSE*self.alpha2 + E_loss_id # + E_loss_GAN 
 				E_loss.backward()
 				self.train_hist['E_loss'].append(E_loss.data[0])
 				self.Enc_optimizer.step()
