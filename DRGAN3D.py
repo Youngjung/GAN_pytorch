@@ -1,4 +1,4 @@
-import utils, torch, time, os, pickle
+import utils, torch, time, os, pickle, imageio
 from scipy.misc import imsave
 import numpy as np
 import torch.nn as nn
@@ -20,80 +20,26 @@ class Encoder( nn.Module ):
 		self.Npcode = Npcode
 
 		self.conv = nn.Sequential(
-			# Conv11, Conv12
-			nn.Conv2d( self.input_dim, 32, 3, 1, 1 ),
-			nn.BatchNorm2d( 32 ),
-			nn.ELU(),
-			nn.Conv2d( 32, 64, 3, 1, 1 ),
-			nn.BatchNorm2d( 64 ),
-			nn.ELU(),
-
-			# Conv21, Conv22, Conv23
-			nn.Conv2d( 64, 64, 3, 2, 1 ),
-			nn.BatchNorm2d( 64 ),
-			nn.ELU(),
-			nn.Conv2d( 64, 64, 3, 1, 1 ),
-			nn.BatchNorm2d( 64 ),
-			nn.ELU(),
-			nn.Conv2d( 64, 128, 3, 1, 1 ),
-			nn.BatchNorm2d( 128 ),
-			nn.ELU(),
-
-			# Conv31, Conv32, Conv33
-			nn.Conv2d( 128, 128, 3, 2, 1 ),
-			nn.BatchNorm2d( 128 ),
-			nn.ELU(),
-			nn.Conv2d( 128, 96, 3, 1, 1 ),
-			nn.BatchNorm2d( 96 ),
-			nn.ELU(),
-			nn.Conv2d( 96, 192, 3, 1, 1 ),
-			nn.BatchNorm2d( 192 ),
-			nn.ELU(),
-
-			# Conv41, Conv42, Conv43
-			nn.Conv2d( 192, 192, 3, 2, 1 ),
-			nn.BatchNorm2d( 192 ),
-			nn.ELU(),
-			nn.Conv2d( 192, 128, 3, 1, 1 ),
-			nn.BatchNorm2d( 128 ),
-			nn.ELU(),
-			nn.Conv2d( 128, 256, 3, 1, 1 ),
-			nn.BatchNorm2d( 256 ),
-			nn.ELU(),
-
-			# Conv51, Conv52, Conv53
-			nn.Conv2d( 256, 256, 3, 2, 1 ),
-			nn.BatchNorm2d( 256 ),
-			nn.ELU(),
-			nn.Conv2d( 256, 160, 3, 1, 1 ),
-			nn.BatchNorm2d( 160 ),
-			nn.ELU(),
-			nn.Conv2d( 160, 320, 3, 1, 1 ),
-			nn.BatchNorm2d( 320 ),
-			nn.ELU(),
-
-			# AvgPool
-			nn.AvgPool2d( 6 )
+			nn.Conv2d(self.input_dim, 64, 11, 4, 1,bias=True),
+			nn.BatchNorm3d(64),
+			nn.ReLU(),
+			nn.Conv2d(64, 128, 5, 2, 1,bias=True),
+			nn.BatchNorm3d(128),
+			nn.ReLU(),
+			nn.Conv2d(128, 256, 5, 2, 1,bias=True),
+			nn.BatchNorm3d(256),
+			nn.ReLU(),
+			nn.Conv2d(256, 512, 5, 2, 1,bias=True),
+			nn.BatchNorm3d(512),
+			nn.ReLU(),
+			nn.Conv2d(512, 320, 8 , 1, 1, bias=True),
+			nn.Sigmoid(),
 		)
-
-		if self.name == 'D':
-			self.fc_GAN = nn.Sequential(
-				nn.Linear( 320, 1 ),
-				nn.Sigmoid()
-			)
-			self.fc_id = nn.Linear( 320, Nid )
-			self.fc_pcode = nn.Linear( 320, Npcode )
 
 		utils.initialize_weights(self)
 
 	def forward(self, input):
 		x = self.conv( input )
-		if self.name == 'D':
-			x_flat = x.view(x.size(0),-1)
-			fGAN = self.fc_GAN( x_flat )
-			fid = self.fc_id( x_flat )
-			fpcode = self.fc_pcode( x_flat )
-			x = ( fGAN, fid, fpcode )
 		return x
 
 class Decoder( nn.Module ):
@@ -102,66 +48,32 @@ class Decoder( nn.Module ):
 		self.output_dim = 3
 
 		self.fc = nn.Sequential(
-			nn.Linear( 320+Npcode+Nz, 6*6*320 )
+			nn.Linear( 320+Npcode+Nz, 320 )
 		)
 
 		self.fconv = nn.Sequential(
-			# FConv52, FConv51
-			nn.ConvTranspose2d( 320, 160, 3, 1, 1 ), 
-			nn.BatchNorm2d( 160 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 160, 256, 3, 1, 1 ), 
-			nn.BatchNorm2d( 256 ),
-			nn.ELU(),
-
-			# FConv43, FConv42, FConv41
-			nn.ConvTranspose2d( 256, 256, 3, 2, 1, output_padding=1 ), 
-			nn.BatchNorm2d( 256 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 256, 128, 3, 1, 1 ), 
-			nn.BatchNorm2d( 128 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 128, 192, 3, 1, 1 ), 
-			nn.BatchNorm2d( 192 ),
-			nn.ELU(),
-
-			# FConv33, FConv32, FConv31
-			nn.ConvTranspose2d( 192, 192, 3, 2, 1, output_padding=1 ), 
-			nn.BatchNorm2d( 192 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 192, 96, 3, 1, 1 ), 
-			nn.BatchNorm2d( 96 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 96, 128, 3, 1, 1 ), 
-			nn.BatchNorm2d( 128 ),
-			nn.ELU(),
-
-			# FConv23, FConv22, FConv21
-			nn.ConvTranspose2d( 128, 128, 3, 2, 1, output_padding=1 ), 
-			nn.BatchNorm2d( 128 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 128, 64, 3, 1, 1 ), 
-			nn.BatchNorm2d( 64 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 64, 64, 3, 1, 1 ), 
-			nn.BatchNorm2d( 64 ),
-			nn.ELU(),
-
-			# FConv13, FConv12, FConv11
-			nn.ConvTranspose2d( 64, 64, 3, 2, 1, output_padding=1 ), 
-			nn.BatchNorm2d( 64 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 64, 32, 3, 1, 1 ), 
-			nn.BatchNorm2d( 32 ),
-			nn.ELU(),
-			nn.ConvTranspose2d( 32, self.output_dim, 3, 1, 1 ),
+			nn.ConvTranspose3d(320, 512, 4, bias=False),
+			nn.BatchNorm3d(512),
+			nn.ReLU(),
+			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(256),
+			nn.ReLU(),
+			nn.ConvTranspose3d(256, 128, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(128),
+			nn.ReLU(),
+			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(64),
+			nn.ReLU(),
+			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(32),
+			nn.ReLU(),
+			nn.ConvTranspose3d(32, 1, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot, z):
 		feature = torch.cat((fx, y_pcode_onehot, z),1)
 		x = self.fc( feature )
-		x = x.view(-1,320,6,6)
-		x = self.fconv( x )
+		x = self.fconv( x.unsqueeze(2).unsqueeze(3).unsqueeze(4) )
 		return x
 
 
@@ -176,10 +88,57 @@ class generator(nn.Module):
 
 	def forward(self, x_, y_pcode_onehot_, z_):
 		fx = self.Genc( x_ )
-		fx = fx.view(-1, 320)
+		fx = fx.view(-1,320)
 		x_hat = self.Gdec(fx, y_pcode_onehot_, z_)
 
 		return x_hat
+
+class discriminator(nn.Module):
+	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
+	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
+	def __init__(self, Nid=105, Npcode=48):
+	
+		super(discriminator, self).__init__()
+		self.conv = nn.Sequential(
+			nn.Conv3d(1, 32, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(32),
+			nn.LeakyReLU(0.2),
+			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(64),
+			nn.LeakyReLU(0.2),
+			nn.Conv3d(64, 128, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(128),
+			nn.LeakyReLU(0.2),
+			nn.Conv3d(128, 256, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(256),
+			nn.LeakyReLU(0.2),
+			nn.Conv3d(256, 512, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(512),
+			nn.LeakyReLU(0.2)
+		)
+
+		self.convGAN = nn.Sequential(
+			nn.Conv3d(512, 1, 4, bias=False),
+			nn.Sigmoid()
+		)
+
+		self.convID = nn.Sequential(
+			nn.Conv3d(512, Nid, 4, bias=False),
+		)
+
+		self.convPCode = nn.Sequential(
+			nn.Conv3d(512, Npcode, 4, bias=False),
+		)
+		utils.initialize_weights(self)
+
+	def forward(self, input):
+		feature = self.conv(input)
+
+		fGAN = self.convGAN( feature ).squeeze(4).squeeze(3).squeeze(2)
+		fid = self.convID( feature ).squeeze(4).squeeze(3).squeeze(2)
+		fcode = self.convPCode( feature ).squeeze(4).squeeze(3).squeeze(2)
+
+		return fGAN, fid, fcode
 
 class DRGAN3D(object):
 	def __init__(self, args):
@@ -201,7 +160,7 @@ class DRGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.nSamples2visualize = 10
+		self.nSamples2visualize = 3
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -245,30 +204,44 @@ class DRGAN3D(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
 											transform=transforms.ToTensor(),
-											shape=(128,128,128), image_shape=96),
+											shape=(128,128,128), image_shape=256),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
 		nSamples = self.nSamples2visualize
+		nPcodes = self.batch_size//nSamples
 		sample_x2D_s = []
+		sample_x3D_s = []
 		for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
 			sample_x2D_s.append( sample_x2D_ )
+			sample_x3D_s.append( sample_x3D_ )
 			break
 			if iB > nSamples // self.batch_size:
 				break
 		sample_x2D_s = torch.cat( sample_x2D_s )[:nSamples,:,:,:]
+		sample_x3D_s = torch.cat( sample_x3D_s )[:nSamples,:,:,:]
 		sample_x2D_s = torch.split( sample_x2D_s, 1 )
-		sample_x2D_s = [ [x]*self.Npcode for x in sample_x2D_s ]
+		sample_x3D_s = torch.split( sample_x3D_s, 1 )
+		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
+		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
 		flatten = lambda l: [item for sublist in l for item in sublist]
 		self.sample_x2D_ = torch.cat( flatten(sample_x2D_s) )
+		self.sample_x3D_ = torch.cat( flatten(sample_x3D_s) )
 #		sample_x2D_s = [sample_x2D_s[0][0].unsqueeze(0)]*nSamples
-		self.sample_pcode_ = torch.zeros( nSamples*self.Npcode, self.Npcode )
-		for iS in range( self.Npcode*nSamples ):
-			ii = iS%self.Npcode
+		self.sample_pcode_ = torch.zeros( nSamples*nPcodes, self.Npcode )
+		for iS in range( nPcodes*nSamples ):
+			ii = iS*nSamples%self.Npcode
 			self.sample_pcode_[iS,ii] = 1
-		self.sample_z_ = torch.rand( nSamples*self.Npcode, self.Nz )
+		self.sample_z_ = torch.rand( nSamples*nPcodes, self.Nz )
+
+		for iS in range( nPcodes*nSamples ):
+			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
+			imageio.imwrite(fname, self.sample_x2D_[iS].numpy().transpose(1,2,0))
+
+		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.npy')
+		self.sample_x3D_.numpy().squeeze().dump( fname )
 
 		if self.gpu_mode:
 			self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
@@ -281,7 +254,7 @@ class DRGAN3D(object):
 
 		# networks init
 		self.G = generator(self.Nid, self.Npcode, self.Nz)
-		self.D = Encoder('D', self.Nid, self.Npcode)
+		self.D = discriminator(self.Nid, self.Npcode)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
@@ -332,24 +305,25 @@ class DRGAN3D(object):
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
 
-			for iB, (sample_x3D_, sample_y_, sample_x2D_ ) in enumerate(self.data_loader):
+			for iB, (x3D_, y_, x2D_ ) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
 				z_ = torch.rand((self.batch_size, self.Nz))
-				x2D_ = sample_x2D_
-				y_id_ = sample_y_['id']
-				y_pcode_ = sample_y_['pcode']
+				y_id_ = y_['id']
+				y_pcode_ = y_['pcode']
 				y_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
 				y_pcode_onehot_.scatter_(1, y_pcode_.view(-1,1), 1)
 
 				if self.gpu_mode:
 					x2D_, z_ = Variable(x2D_.cuda()), Variable(z_.cuda())
+					x3D_ = Variable(x3D_.cuda())
 					y_id_ = Variable( y_id_.cuda() )
 					y_pcode_ = Variable(y_pcode_.cuda())
 					y_pcode_onehot_ = Variable( y_pcode_onehot_.cuda() )
 				else:
 					x2D_, z_ = Variable(x2D_), Variable(z_)
+					x3D_ = Variable(x3D_)
 					y_id_ = Variable(y_id_)
 					y_pcode_ = Variable(y_pcode_)
 					y_pcode_onehot_ = Variable( y_pcode_onehot_ )
@@ -357,14 +331,18 @@ class DRGAN3D(object):
 				# update D network
 				self.D_optimizer.zero_grad()
 
-				D_GAN_real, D_id, D_pcode = self.D(x2D_)
+				D_GAN_real, D_id, D_pcode = self.D(x3D_)
 				D_loss_GANreal = self.BCE_loss(D_GAN_real, self.y_real_)
 				D_loss_real_id = self.CE_loss(D_id, y_id_)
 				D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
 
-				x2D_hat = self.G(x2D_, y_pcode_onehot_, z_)
-				D_GAN_fake, _, _ = self.D(x2D_hat)
+				x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
+				D_GAN_fake, _, _ = self.D(x3D_hat)
 				D_loss_GANfake = self.BCE_loss(D_GAN_fake, self.y_fake_)
+
+				num_correct_real = torch.sum(D_GAN_real>0.5)
+				num_correct_fake = torch.sum(D_GAN_fake<0.5)
+				D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
 
 				# DRAGAN Loss (Gradient penalty)
 				if self.use_GP:
@@ -387,10 +365,11 @@ class DRGAN3D(object):
 											create_graph=True, retain_graph=True, only_inputs=True)[0]
 	
 					gradient_penalty = self.lambda_ * ((gradients.view(gradients.size(0),-1).norm(2,1)-1)**2).mean()
-				else:
-					gradient_penalty = 0
 
-				D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake + gradient_penalty
+					D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake + gradient_penalty
+				else:
+					D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake
+
 				self.train_hist['D_loss'].append(D_loss.data[0])
 				self.train_hist['D_loss_GAN_real'].append(D_loss_GANreal.data[0])
 				self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
@@ -398,18 +377,21 @@ class DRGAN3D(object):
 				self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
 
 				D_loss.backward()
-				self.D_optimizer.step()
+				if D_acc < 0.8:
+					self.D_optimizer.step()
 
 				# update G network
 				for iG in range(4):
 					self.G_optimizer.zero_grad()
 	
-					x2D_hat = self.G(x2D_, y_pcode_onehot_, z_)
-					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x2D_hat)
+					x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
+					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
 					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode 
+					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
+
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
@@ -423,12 +405,14 @@ class DRGAN3D(object):
 					secs = time.time()-start_time_epoch
 					hours = secs//3600
 					mins = secs/60%60
-					print("%2dh%2dm E:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f,%.4f,\n\t\t\t G: %.4f=%.4f+%.4f+%.4f" %
+					#print("%2dh%2dm E:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f+%.4f,\n\t\t\t G: %.4f=%.4f+%.4f+%.4f" %
+					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f,G: %.4f, D_acc:%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  D_loss.data[0], D_loss_GANreal.data[0], D_loss_real_id.data[0],
-						  D_loss_real_pcode.data[0], D_loss_GANfake.data[0],
-						  G_loss.data[0], G_loss_GANfake.data[0], G_loss_id.data[0],
-						  G_loss_pcode.data[0]) )
+						  D_loss.data[0], G_loss.data[0], D_acc) )
+#						  D_loss.data[0], D_loss_GANreal.data[0], D_loss_real_id.data[0],
+#						  D_loss_real_pcode.data[0], D_loss_GANfake.data[0],
+#						  G_loss.data[0], G_loss_GANfake.data[0], G_loss_id.data[0],
+#						  G_loss_pcode.data[0]) )
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			self.save()
@@ -444,6 +428,7 @@ class DRGAN3D(object):
 		utils.generate_animation(self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name,
 								 self.epoch)
 		utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
+
 
 	def visualize_results(self, epoch, fix=True):
 		self.G.eval()
@@ -467,17 +452,13 @@ class DRGAN3D(object):
 			samples = self.G(sample_z_)
 
 		if self.gpu_mode:
-			samples = samples.cpu().data.numpy().transpose(0, 2, 3, 1)
-			sample_x2D_ = self.sample_x2D_.cpu().data.numpy().transpose(0, 2, 3, 1)
+			samples = samples.cpu().data.numpy().squeeze()
 		else:
-			samples = samples.data.numpy().transpose(0, 2, 3, 1)
-			sample_x2D_ = self.sample_x2D_.data.numpy().transpose(0, 2, 3, 1)
+			samples = samples.data.numpy().squeeze()
 
-		if epoch == 1:
-			utils.save_images(sample_x2D_[:nRows*nCols, :, :, :], [nRows, nCols],
-						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d_x' % epoch + '.png')
-		utils.save_images(samples[:nRows*nCols, :, :, :], [nRows, nCols],
-						  self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.png')
+		fname = self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.npy'
+		samples.dump(fname)
+
 
 	def save(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
