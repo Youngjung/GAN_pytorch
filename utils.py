@@ -11,7 +11,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 
-from utils3D.data_io import read_binvox, read_bnt, bnt2voxel
+from utils3D.data_io import read_binvox, read_bnt, bnt2voxel, bnt2voxel_wColor
 from utils3D.visualize import plot_voxel
 
 import pdb
@@ -100,12 +100,14 @@ class IKEA(Dataset):
 
 
 class Bosphorus( Dataset ):
-	def __init__( self, root_dir, transform=None, use_image = False, skipCodes=[], shape=(64,64,64), image_shape=256):
+	def __init__( self, root_dir, transform=None, use_image=False, use_colorPCL=True,
+					skipCodes=[], shape=(64,64,64), image_shape=256):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
 		self.suffix = '_trim.bnt'
 		self.use_image = use_image
+		self.use_colorPCL = use_colorPCL
 		self.shape = shape
 		self.image_shape = image_shape
 
@@ -148,14 +150,14 @@ class Bosphorus( Dataset ):
 		return len( self.filenames )
 	
 	def __getitem__( self, idx ):
+		# parsing
 		basename = os.path.basename( self.filenames[idx] )
 		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
-		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
-		pcl = bnt2voxel( bnt_data, self.shape )
-		pcl = np.expand_dims(pcl,0)
-		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
+
+		# load image
 		if self.use_image:
 			image = Image.open( self.filenames[idx][:-len(self.suffix)]+'.png' )
+			image_original = image
 			ratio = float(self.image_shape)/image.size[1] # size returns (w,h), we need h (longer side)
 			image = scipy.misc.imresize( image, (self.image_shape,int(ratio*image.size[0])) )
 			width = image.shape[1]
@@ -163,7 +165,18 @@ class Bosphorus( Dataset ):
 			image = np.pad( image, ((0,0),(w,w+width%2),(0,0)),'constant',constant_values=0 )
 			if self.transform:
 				image = self.transform(image)
+				if self.use_colorPCL:
+					image_original = self.transform(image_original)
+
+		# load point cloud and fill voxel
+		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
+		if self.use_colorPCL:
+			pcl = bnt2voxel_wColor( bnt_data, image_original, self.shape )
+		else:
+			pcl = bnt2voxel( bnt_data, self.shape )
+		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
 		pcl = torch.Tensor( pcl )
+
 		try:
 			identity = int(identity[2:])
 			poseclass = self.poseclassmap[poseclass]

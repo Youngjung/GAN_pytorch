@@ -43,9 +43,9 @@ class Encoder( nn.Module ):
 		return x
 
 class Decoder( nn.Module ):
-	def __init__(self, Npcode, Nz):
+	def __init__(self, Npcode, Nz, nOutputCh=4):
 		super(Decoder, self).__init__()
-		self.output_dim = 3
+		self.nOutputCh = nOutputCh
 
 		self.fc = nn.Sequential(
 			nn.Linear( 320+Npcode+Nz, 320 )
@@ -67,7 +67,7 @@ class Decoder( nn.Module ):
 			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.ReLU(),
-			nn.ConvTranspose3d(32, 1, 4, 2, 1, bias=False),
+			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot, z):
@@ -96,11 +96,12 @@ class generator(nn.Module):
 class discriminator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, Nid=105, Npcode=48):
-	
+	def __init__(self, Nid=105, Npcode=48, nInputCh=4):
 		super(discriminator, self).__init__()
+		self.nInputCh = nInputCh
+
 		self.conv = nn.Sequential(
-			nn.Conv3d(1, 32, 4, 2, 1, bias=False),
+			nn.Conv3d(nInputCh, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
@@ -236,6 +237,8 @@ class DRGAN3D(object):
 			self.sample_pcode_[iS,ii] = 1
 		self.sample_z_ = torch.rand( nSamples*nPcodes, self.Nz )
 
+		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
+			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 		for iS in range( nPcodes*nSamples ):
 			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
 			imageio.imwrite(fname, self.sample_x2D_[iS].numpy().transpose(1,2,0))
