@@ -56,20 +56,44 @@ def main():
 
 		g_objects = np.load(fname)
 	
-		for i in range(g_objects.shape[0]):
-			if g_objects[i].max() > opts.thresh:
-				print( 'plotting epoch {} sample {}...'.format(epoch, i) )
-				binarized = g_objects[i]>opts.thresh
-				ind = np.nonzero( binarized )
-				indnp = np.array(ind)
-				list_of_tuples = list(map(tuple,indnp.transpose()))
-				vertex = np.array( list_of_tuples, dtype=[('x','f4'),('y','f4'),('z','f4')])
+		# non-colored results have 4 dims due to squeeze()
+		if g_objects.ndim == 4:
+			for i in range(g_objects.shape[0]):
+				if g_objects[i].max() > opts.thresh:
+					print( 'plotting epoch {} sample {}...'.format(epoch, i) )
+					binarized = g_objects[i]>opts.thresh
+					ind = np.nonzero( binarized )
+					indnp = np.array(ind)
+					list_of_tuples = list(map(tuple,indnp.transpose()))
+					vertex = np.array( list_of_tuples, dtype=[('x','f4'),('y','f4'),('z','f4')])
+	
+					el = PlyElement.describe( vertex, 'vertex' )
+					ply_filename = os.path.join(opts.dir_dest,'_'.join(map(str,[epoch,i]))) + '.ply'
+					PlyData([el]).write( ply_filename )
+				else:
+					print( 'max={}'.format(g_objects[i].max()) )
+		elif g_objects.ndim == 5:
+			for i in range(g_objects.shape[0]):
+				if g_objects[i,0].max() > opts.thresh:
+					print( 'plotting epoch {} sample {}...'.format(epoch, i) )
+					binarized = g_objects[i,0]>opts.thresh
+					ind = np.nonzero( binarized )
+					r = tuple(g_objects[i,1,x,y,z]*255 for (x,y,z) in zip(ind[0],ind[1],ind[2]))
+					g = tuple(g_objects[i,2,x,y,z]*255 for (x,y,z) in zip(ind[0],ind[1],ind[2]))
+					b = tuple(g_objects[i,3,x,y,z]*255 for (x,y,z) in zip(ind[0],ind[1],ind[2]))
+					ind = ind + (r,) + (g,) + (b,)
+					indnp = np.array(ind)
+					list_of_tuples = list(map(tuple,indnp.transpose()))
+					vertex = np.array( list_of_tuples,
+						dtype=[('x','f4'),('y','f4'),('z','f4'),('red','u1'),('green','u1'),('blue','u1')])
 
-				el = PlyElement.describe( vertex, 'vertex' )
-				ply_filename = os.path.join(opts.dir_dest,'_'.join(map(str,[epoch,i]))) + '.ply'
-				PlyData([el]).write( ply_filename )
-			else:
-				print( 'max={}'.format(g_objects[i].max()) )
+					el = PlyElement.describe( vertex, 'vertex' )
+					ply_filename = os.path.join(opts.dir_dest,'_'.join(map(str,[epoch,i]))) + '.ply'
+					PlyData([el],text=True).write( ply_filename )
+				else:
+					print( 'max={}'.format(g_objects[i].max()) )
+		else:
+			error("not supported dims : {}".format(g_objects.ndim))
 	
 
 if __name__ == '__main__':
