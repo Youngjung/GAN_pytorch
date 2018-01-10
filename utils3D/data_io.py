@@ -25,6 +25,7 @@ def read_bnt(path):
 	return pcl, nrows, ncols, imfile
 
 def bnt2voxel(pcl,shape=(64,64,64),fill_mass=False):
+	# compute ratio
 	maxs = pcl[:,:3].max(0)
 	mins = pcl[:,:3].min(0)
 	xmax, ymax, zmax = maxs
@@ -40,6 +41,7 @@ def bnt2voxel(pcl,shape=(64,64,64),fill_mass=False):
 		except:
 			pdb.set_trace()
 
+	# fill voxel
 	for i in range(pcl.shape[0]):
 		x,y,z,_,_ = pcl[i]
 		try:
@@ -51,9 +53,50 @@ def bnt2voxel(pcl,shape=(64,64,64),fill_mass=False):
 		except:
 			print( x,y,z )
 			print( int(x)-xmin,int(y)-ymin,int(z)-zmin )
+	return voxel
+
+def bnt2voxel_wColor(pcl, image, shape=(64,64,64), fill_mass=False):
+	# compute ratio
+	maxs = pcl[:,:3].max(0)
+	mins = pcl[:,:3].min(0)
+	xmax, ymax, zmax = maxs
+	xmin, ymin, zmin = mins
+	raw_shape = [m-n+1 for m,n in zip(maxs,mins)]
+	ratio = [float(s)/v for (s,v) in zip(shape,raw_shape)]
+	ratio_min = min(ratio)
+	ratio = [ratio_min,ratio_min,ratio_min]
+	shape = (4,)+shape
+	voxel = np.zeros(shape)
+	if fill_mass:
+		try:
+			minminz = int((min(pcl[:,2])-zmin)*ratio[2])
+		except:
+			pdb.set_trace()
+
+	# fill voxel
+	for i in range(pcl.shape[0]):
+		x,y,z,u,v = pcl[i]
+		r,g,b = image[:,v*image.shape[1],u*image.shape[2]]
+		try:
+			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
+
+			if fill_mass:
+				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = 1
+				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = r
+				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = g
+				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = b
+			else:
+				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
+				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = r
+				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = g
+				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = b
+		except:
+			print( x,y,z )
+			print( int(x)-xmin,int(y)-ymin,int(z)-zmin )
 #	np.expand_dims(voxel,0).dump('Bosphorus_temp/voxel_data_resized.npy')
 #	pdb.set_trace()
 	return voxel
+
 
 def read_h5(path):
 	"""
