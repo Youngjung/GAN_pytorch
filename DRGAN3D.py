@@ -161,7 +161,7 @@ class DRGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.nSamples2visualize = 3
+		self.nSamples2visualize = 49
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -211,35 +211,37 @@ class DRGAN3D(object):
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
-		nSamples = self.nSamples2visualize
-		nPcodes = self.batch_size//nSamples
+		nSamples = self.nSamples2visualize-self.Npcode
+		nPcodes = self.Npcode
 		sample_x2D_s = []
 		sample_x3D_s = []
 		for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
 			sample_x2D_s.append( sample_x2D_ )
 			sample_x3D_s.append( sample_x3D_ )
-			break
 			if iB > nSamples // self.batch_size:
 				break
 		sample_x2D_s = torch.cat( sample_x2D_s )[:nSamples,:,:,:]
 		sample_x3D_s = torch.cat( sample_x3D_s )[:nSamples,:,:,:]
 		sample_x2D_s = torch.split( sample_x2D_s, 1 )
 		sample_x3D_s = torch.split( sample_x3D_s, 1 )
-		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
-		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
-		flatten = lambda l: [item for sublist in l for item in sublist]
-		self.sample_x2D_ = torch.cat( flatten(sample_x2D_s) )
-		self.sample_x3D_ = torch.cat( flatten(sample_x3D_s) )
+		sample_x2D_s += (sample_x2D_s[0],)*nPcodes
+		sample_x3D_s += (sample_x3D_s[0],)*nPcodes
+#		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
+#		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
+#		flatten = lambda l: [item for sublist in l for item in sublist]
+		self.sample_x2D_ = torch.cat( sample_x2D_s )
+		self.sample_x3D_ = torch.cat( sample_x3D_s )
 #		sample_x2D_s = [sample_x2D_s[0][0].unsqueeze(0)]*nSamples
-		self.sample_pcode_ = torch.zeros( nSamples*nPcodes, self.Npcode )
-		for iS in range( nPcodes*nSamples ):
-			ii = iS*nSamples%self.Npcode
-			self.sample_pcode_[iS,ii] = 1
-		self.sample_z_ = torch.rand( nSamples*nPcodes, self.Nz )
+		self.sample_pcode_ = torch.zeros( nSamples+nPcodes, self.Npcode )
+		self.sample_pcode_[:nSamples,0]=1
+		for iS in range( nPcodes ):
+			ii = iS%self.Npcode
+			self.sample_pcode_[iS+nSamples,ii] = 1
+		self.sample_z_ = torch.rand( nSamples+nPcodes, self.Nz )
 
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-		for iS in range( nPcodes*nSamples ):
+		for iS in range( nPcodes+nSamples ):
 			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
 			imageio.imwrite(fname, self.sample_x2D_[iS].numpy().transpose(1,2,0))
 
@@ -313,6 +315,9 @@ class DRGAN3D(object):
 					break
 
 				z_ = torch.rand((self.batch_size, self.Nz))
+				y_random_pcode_ = torch.floor(torch.rand(self.batch_size)*self.Npcode).long()
+				y_random_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
+				y_random_pcode_onehot_.scatter_(1, y_random_pcode.view(-1,1), 1)
 				y_id_ = y_['id']
 				y_pcode_ = y_['pcode']
 				y_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
@@ -324,6 +329,8 @@ class DRGAN3D(object):
 					y_id_ = Variable( y_id_.cuda() )
 					y_pcode_ = Variable(y_pcode_.cuda())
 					y_pcode_onehot_ = Variable( y_pcode_onehot_.cuda() )
+					y_random_pcode_ = Variable(y_random_pcode_.cuda())
+					y_random_pcode_onehot_ = Variable( y_random_pcode_onehot_.cuda() )
 				else:
 					x2D_, z_ = Variable(x2D_), Variable(z_)
 					x3D_ = Variable(x3D_)
@@ -339,7 +346,7 @@ class DRGAN3D(object):
 				D_loss_real_id = self.CE_loss(D_id, y_id_)
 				D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
 
-				x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
+				x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
 				D_GAN_fake, _, _ = self.D(x3D_hat)
 				D_loss_GANfake = self.BCE_loss(D_GAN_fake, self.y_fake_)
 
@@ -387,13 +394,13 @@ class DRGAN3D(object):
 				for iG in range(4):
 					self.G_optimizer.zero_grad()
 	
-					x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
+					x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
-					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
-					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
+					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
+#					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode # + G_loss_recon
 
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
@@ -438,9 +445,6 @@ class DRGAN3D(object):
 
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-
-		nRows = self.nSamples2visualize
-		nCols = self.Npcode
 
 		if fix:
 			""" fixed noise """
