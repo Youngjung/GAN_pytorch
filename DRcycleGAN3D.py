@@ -6,7 +6,7 @@ from torch.autograd import Variable, grad
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-import utils, torch, time, os, pickle, imageio
+import utils, torch, time, os, pickle, imageio, math
 from utils import Flatten, Inflate
 import pdb
 
@@ -304,7 +304,7 @@ class DRcycleGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.nSamples2visualize = 3
+		self.nSamples2visualize = 49
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -358,34 +358,37 @@ class DRcycleGAN3D(object):
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
-		nSamples = self.nSamples2visualize
-		nPcodes = self.batch_size//nSamples
+		nSamples = self.nSamples2visualize-self.Npcode
+		nPcodes = self.Npcode
 		sample_x2D_s = []
 		sample_x3D_s = []
 		for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
 			sample_x2D_s.append( sample_x2D_ )
 			sample_x3D_s.append( sample_x3D_ )
-			break
 			if iB > nSamples // self.batch_size:
 				break
 		sample_x2D_s = torch.cat( sample_x2D_s )[:nSamples,:,:,:]
 		sample_x3D_s = torch.cat( sample_x3D_s )[:nSamples,:,:,:]
 		sample_x2D_s = torch.split( sample_x2D_s, 1 )
 		sample_x3D_s = torch.split( sample_x3D_s, 1 )
-		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
-		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
-		flatten = lambda l: [item for sublist in l for item in sublist]
-		self.sample_x2D_ = torch.cat( flatten(sample_x2D_s) )
-		self.sample_x3D_ = torch.cat( flatten(sample_x3D_s) )
+		sample_x2D_s += (sample_x2D_s[0],)*nPcodes
+		sample_x3D_s += (sample_x3D_s[0],)*nPcodes
+#		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
+#		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
+#		flatten = lambda l: [item for sublist in l for item in sublist]
+		self.sample_x2D_ = torch.cat( sample_x2D_s )
+		self.sample_x3D_ = torch.cat( sample_x3D_s )
 #		sample_x2D_s = [sample_x2D_s[0][0].unsqueeze(0)]*nSamples
-		self.sample_pcode_ = torch.zeros( nSamples*nPcodes, self.Npcode )
-		for iS in range( nPcodes*nSamples ):
-			ii = iS*nSamples%self.Npcode
-			self.sample_pcode_[iS,ii] = 1
-		self.sample_z_ = torch.rand( nSamples*nPcodes, self.Nz )
+		self.sample_pcode_ = torch.zeros( nSamples+nPcodes, self.Npcode )
+		self.sample_pcode_[:nSamples,0]=1
+		for iS in range( nPcodes ):
+			ii = iS%self.Npcode
+			self.sample_pcode_[iS+nSamples,ii] = 1
+		self.sample_z_ = torch.rand( nSamples+nPcodes, self.Nz )
 
 		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'samples.png' )
-		utils.save_images(self.sample_x2D_[:nSamples*nPcodes,:,:,:].numpy().transpose(0,2,3,1), [nSamples, nPcodes],fname)
+		nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
+		utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
 #		for iS in range( nPcodes*nSamples ):
 #			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
 #			imageio.imwrite(fname, self.sample_x2D_[iS].numpy().transpose(1,2,0))
@@ -635,8 +638,8 @@ class DRcycleGAN3D(object):
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 
-		nRows = self.nSamples2visualize
-		nCols = self.batch_size//nRows
+		nRows = int( math.ceil( math.sqrt( self.nSamples2visualize ) ) )
+		nCols = nRows
 
 		""" fixed noise """
 		samples_3D = self.G_2Dto3D(self.sample_x2D_, self.sample_pcode_, self.sample_z_ )
