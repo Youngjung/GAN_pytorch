@@ -386,7 +386,10 @@ def generate_animation(path, num):
 	imageio.mimsave(path + '_generate_animation.gif', images, fps=5)
 
 def loss_plot(hist, path='.', model_name='model', y_max=None ):
-	x = range(len(hist['D_loss']))
+	try:
+		x = range(len(hist['D_loss']))
+	except:
+		x = range(len(hist['D_3D_loss']))
 
 	for key,value in hist.iteritems():
 		if 'time' in key:
@@ -423,7 +426,7 @@ def initialize_weights(net):
 			m.bias.data.zero_()
 		elif isinstance(m, nn.ConvTranspose2d):
 			m.weight.data.normal_(0, 0.02)
-			m.bias.data.zero_()
+#			m.bias.data.zero_()
 		elif isinstance(m, nn.Conv3d):
 			nn.init.xavier_uniform(m.weight)
 		elif isinstance(m, nn.ConvTranspose3d):
@@ -431,3 +434,21 @@ def initialize_weights(net):
 		elif isinstance(m, nn.Linear):
 			m.weight.data.normal_(0, 0.02)
 			m.bias.data.zero_()
+
+
+class Flatten(nn.Module):
+	def __init__(self):
+		super(Flatten, self).__init__()
+
+	def forward(self, x):
+		return x.view(x.size(0), -1)
+
+
+class Inflate(nn.Module):
+	def __init__(self, nDims2add):
+		super(Inflate, self).__init__()
+		self.nDims2add = nDims2add
+
+	def forward(self, x):
+		shape = x.size() + (1,)*self.nDims2add
+		return x.view(shape)
