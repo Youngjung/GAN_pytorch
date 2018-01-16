@@ -317,7 +317,7 @@ class DRGAN3D(object):
 				z_ = torch.rand((self.batch_size, self.Nz))
 				y_random_pcode_ = torch.floor(torch.rand(self.batch_size)*self.Npcode).long()
 				y_random_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
-				y_random_pcode_onehot_.scatter_(1, y_random_pcode.view(-1,1), 1)
+				y_random_pcode_onehot_.scatter_(1, y_random_pcode_.view(-1,1), 1)
 				y_id_ = y_['id']
 				y_pcode_ = y_['pcode']
 				y_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
@@ -385,6 +385,7 @@ class DRGAN3D(object):
 				self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
 				self.train_hist['D_loss_pcode'].append(D_loss_real_pcode.data[0])
 				self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
+				self.train_hist['D_acc'].append(D_acc)
 
 				D_loss.backward()
 				if D_acc < 0.8:

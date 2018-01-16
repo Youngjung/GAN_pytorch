@@ -391,27 +391,31 @@ def loss_plot(hist, path='.', model_name='model', y_max=None ):
 	except:
 		x = range(len(hist['D_3D_loss']))
 
+	f, axarr = plt.subplots(2, sharex=True)
+	axarr[0].xlabel('Iter')
+	axarr[0].ylabel('Loss')
+	axarr[0].legend(loc=1)
+	axarr[0].grid(True)
+	axarr[0].tight_layout()
+
+	axarr[1].xlabel('Iter')
+	axarr[1].ylabel('D_acc')
+	axarr[1].legend(loc=1)
+	axarr[1].grid(True)
+	axarr[1].tight_layout()
+
 	for key,value in hist.iteritems():
-		if 'time' in key:
+		if 'time' in key or 
 			continue
 		y = value
-		plt.plot(x, y, label=key)
-#	y1 = hist['D_loss']
-#	y2 = hist['G_loss']
-#
-#	plt.plot(x, y1, label='D_loss')
-#	plt.plot(x, y2, label='G_loss')
-
-	plt.xlabel('Iter')
-	plt.ylabel('Loss')
-
-	plt.legend(loc=4)
-	plt.grid(True)
-	plt.tight_layout()
+		if 'acc' in key:
+			axarr[1].plot(x, y, label=key)
+		else
+			axarr[0].plot(x, y, label=key)
 
 	if y_max is not None:
-		x_min, x_max, y_min, _ = plt.axis()
-		plt.axis( (x_min, x_max, -y_max/20, y_max) )
+		x_min, x_max, y_min, _ = axarr[0].axis()
+		axarr[0].axis( (x_min, x_max, -y_max/20, y_max) )
 
 	path = os.path.join(path, model_name + '_loss.png')
 
