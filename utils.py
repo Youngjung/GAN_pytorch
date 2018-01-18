@@ -155,9 +155,10 @@ class Bosphorus( Dataset ):
 		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
 
 		# load image
-		if self.use_image:
+		if self.use_image or self.use_colorPCL:
 			image = Image.open( self.filenames[idx][:-len(self.suffix)]+'.png' )
 			image_original = image
+		if self.use_image:
 			ratio = float(self.image_shape)/image.size[1] # size returns (w,h), we need h (longer side)
 			image = scipy.misc.imresize( image, (self.image_shape,int(ratio*image.size[0])) )
 			width = image.shape[1]
@@ -165,8 +166,8 @@ class Bosphorus( Dataset ):
 			image = np.pad( image, ((0,0),(w,w+width%2),(0,0)),'constant',constant_values=0 )
 			if self.transform:
 				image = self.transform(image)
-				if self.use_colorPCL:
-					image_original = self.transform(image_original)
+		if self.use_colorPCL and self.transform:
+			image_original = self.transform(image_original)
 
 		# load point cloud and fill voxel
 		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
@@ -392,25 +393,22 @@ def loss_plot(hist, path='.', model_name='model', y_max=None ):
 		x = range(len(hist['D_3D_loss']))
 
 	f, axarr = plt.subplots(2, sharex=True)
-	axarr[0].xlabel('Iter')
-	axarr[0].ylabel('Loss')
+	plt.xlabel('Iter')
+	plt.ylabel('Loss')
+	plt.tight_layout()
+
 	axarr[0].legend(loc=1)
 	axarr[0].grid(True)
-	axarr[0].tight_layout()
-
-	axarr[1].xlabel('Iter')
-	axarr[1].ylabel('D_acc')
 	axarr[1].legend(loc=1)
 	axarr[1].grid(True)
-	axarr[1].tight_layout()
 
 	for key,value in hist.iteritems():
-		if 'time' in key or 
+		if 'time' in key:
 			continue
 		y = value
 		if 'acc' in key:
 			axarr[1].plot(x, y, label=key)
-		else
+		else:
 			axarr[0].plot(x, y, label=key)
 
 	if y_max is not None:
