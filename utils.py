@@ -386,34 +386,47 @@ def generate_animation(path, num):
 		images.append(imageio.imread(img_name))
 	imageio.mimsave(path + '_generate_animation.gif', images, fps=5)
 
-def loss_plot(hist, path='.', model_name='model', y_max=None ):
+def loss_plot(hist, path='.', model_name='model', y_max=None, use_subplot=False, keys_to_show=[] ):
 	try:
 		x = range(len(hist['D_loss']))
 	except:
 		x = range(len(hist['D_3D_loss']))
 
-	f, axarr = plt.subplots(2, sharex=True)
+	if use_subplot:
+		f, axarr = plt.subplots(2, sharex=True)
+		
 	plt.xlabel('Iter')
 	plt.ylabel('Loss')
 	plt.tight_layout()
 
-	axarr[0].legend(loc=1)
-	axarr[0].grid(True)
-	axarr[1].legend(loc=1)
-	axarr[1].grid(True)
-
 	for key,value in hist.iteritems():
-		if 'time' in key:
+		if 'time' in key or key not in keys_to_show:
 			continue
 		y = value
-		if 'acc' in key:
+		if use_subplot and 'acc' in key:
 			axarr[1].plot(x, y, label=key)
-		else:
+		elif use_subplot:
 			axarr[0].plot(x, y, label=key)
+		else:
+			plt.plot(x, y, label=key)
+
+	if use_subplot:
+		axarr[0].legend(loc=1)
+		axarr[0].grid(True)
+		axarr[1].legend(loc=1)
+		axarr[1].grid(True)
+	else:
+		plt.legend(loc=1)
+		plt.grid(True)
+
 
 	if y_max is not None:
-		x_min, x_max, y_min, _ = axarr[0].axis()
-		axarr[0].axis( (x_min, x_max, -y_max/20, y_max) )
+		if use_subplot:
+			x_min, x_max, y_min, _ = axarr[0].axis()
+			axarr[0].axis( (x_min, x_max, -y_max/20, y_max) )
+		else:
+			x_min, x_max, y_min, _ = plt.axis()
+			plt.axis( (x_min, x_max, -y_max/20, y_max) )
 
 	path = os.path.join(path, model_name + '_loss.png')
 
