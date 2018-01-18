@@ -241,9 +241,8 @@ class DRGAN3D(object):
 
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-		for iS in range( nPcodes+nSamples ):
-			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
-			imageio.imwrite(fname, self.sample_x2D_[iS].numpy().transpose(1,2,0))
+		nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
+		utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
 
 		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.npy')
 		self.sample_x3D_.numpy().squeeze().dump( fname )
@@ -337,6 +336,8 @@ class DRGAN3D(object):
 					y_id_ = Variable(y_id_)
 					y_pcode_ = Variable(y_pcode_)
 					y_pcode_onehot_ = Variable( y_pcode_onehot_ )
+					y_random_pcode_ = Variable(y_random_pcode_)
+					y_random_pcode_onehot_ = Variable( y_random_pcode_onehot_ )
 
 				# update D network
 				self.D_optimizer.zero_grad()
@@ -436,8 +437,6 @@ class DRGAN3D(object):
 		print("Training finish!... save training results")
 
 		self.save()
-		utils.generate_animation(self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name,
-								 self.epoch)
 		utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 
