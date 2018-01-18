@@ -304,7 +304,7 @@ class DRcycleGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.nSamples2visualize = 49
+		self.nSamples2visualize = 19
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -358,8 +358,8 @@ class DRcycleGAN3D(object):
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
-		nSamples = self.nSamples2visualize-self.Npcode
-		nPcodes = self.Npcode
+		nPcodes = self.Npcode//4
+		nSamples = self.nSamples2visualize-nPcodes
 		sample_x2D_s = []
 		sample_x3D_s = []
 		for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
@@ -373,12 +373,8 @@ class DRcycleGAN3D(object):
 		sample_x3D_s = torch.split( sample_x3D_s, 1 )
 		sample_x2D_s += (sample_x2D_s[0],)*nPcodes
 		sample_x3D_s += (sample_x3D_s[0],)*nPcodes
-#		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
-#		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
-#		flatten = lambda l: [item for sublist in l for item in sublist]
 		self.sample_x2D_ = torch.cat( sample_x2D_s )
 		self.sample_x3D_ = torch.cat( sample_x3D_s )
-#		sample_x2D_s = [sample_x2D_s[0][0].unsqueeze(0)]*nSamples
 		self.sample_pcode_ = torch.zeros( nSamples+nPcodes, self.Npcode )
 		self.sample_pcode_[:nSamples,0]=1
 		for iS in range( nPcodes ):
@@ -389,9 +385,6 @@ class DRcycleGAN3D(object):
 		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'samples.png' )
 		nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
 		utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
-#		for iS in range( nPcodes*nSamples ):
-#			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
-#			imageio.imwrite(fname, self.sample_x2D_[iS].numpy().transpose(1,2,0))
 
 		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.npy')
 		self.sample_x3D_.numpy().squeeze().dump( fname )
@@ -448,21 +441,27 @@ class DRcycleGAN3D(object):
 		self.train_hist['D_3D_loss_id'] = []
 		self.train_hist['D_3D_loss_pcode'] = []
 		self.train_hist['D_3D_loss_GAN_fake'] = []
+		self.train_hist['D_3D_acc'] = []
+
 		self.train_hist['D_2D_loss'] = []
 		self.train_hist['D_2D_loss_GAN_real'] = []
 		self.train_hist['D_2D_loss_id'] = []
 		self.train_hist['D_2D_loss_pcode'] = []
 		self.train_hist['D_2D_loss_GAN_fake'] = []
+		self.train_hist['D_2D_acc'] = []
+
 		self.train_hist['G_3D_loss'] = []
 		self.train_hist['G_3D_loss'] = []
 		self.train_hist['G_3D_loss_GAN_fake'] = []
 		self.train_hist['G_3D_loss_id'] = []
 		self.train_hist['G_3D_loss_pcode'] = []
+
 		self.train_hist['G_2D_loss'] = []
 		self.train_hist['G_2D_loss'] = []
 		self.train_hist['G_2D_loss_GAN_fake'] = []
 		self.train_hist['G_2D_loss_id'] = []
 		self.train_hist['G_2D_loss_pcode'] = []
+
 		self.train_hist['per_epoch_time'] = []
 		self.train_hist['total_time'] = []
 
@@ -493,6 +492,9 @@ class DRcycleGAN3D(object):
 				y_pcode_ = y_['pcode']
 				y_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
 				y_pcode_onehot_.scatter_(1, y_pcode_.view(-1,1), 1)
+				y_random_pcode_ = torch.floor(torch.rand(self.batch_size)*self.Npcode).long()
+				y_random_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
+				y_random_pcode_onehot_.scatter_(1, y_random_pcode_.view(-1,1), 1)
 
 				if self.gpu_mode:
 					x2D_, z_ = Variable(x2D_.cuda()), Variable(z_.cuda())
@@ -500,12 +502,16 @@ class DRcycleGAN3D(object):
 					y_id_ = Variable( y_id_.cuda() )
 					y_pcode_ = Variable(y_pcode_.cuda())
 					y_pcode_onehot_ = Variable( y_pcode_onehot_.cuda() )
+					y_random_pcode_ = Variable(y_random_pcode_.cuda())
+					y_random_pcode_onehot_ = Variable( y_random_pcode_onehot_.cuda() )
 				else:
 					x2D_, z_ = Variable(x2D_), Variable(z_)
 					x3D_ = Variable(x3D_)
 					y_id_ = Variable(y_id_)
 					y_pcode_ = Variable(y_pcode_)
 					y_pcode_onehot_ = Variable( y_pcode_onehot_ )
+					y_random_pcode_ = Variable(y_random_pcode_)
+					y_random_pcode_onehot_ = Variable( y_random_pcode_onehot_ )
 
 				# update D_3D network
 				self.D_3D_optimizer.zero_grad()
@@ -515,7 +521,7 @@ class DRcycleGAN3D(object):
 				D_3D_loss_real_id = self.CE_loss(D_3D_id, y_id_)
 				D_3D_loss_real_pcode = self.CE_loss(D_3D_pcode, y_pcode_)
 
-				x3D_hat = self.G_2Dto3D(x2D_, y_pcode_onehot_, z_)
+				x3D_hat = self.G_2Dto3D(x2D_, y_random_pcode_onehot_, z_)
 				D_3D_GAN_fake, _, _ = self.D_3D(x3D_hat)
 				D_3D_loss_GANfake = self.BCE_loss(D_3D_GAN_fake, self.y_fake_)
 
@@ -534,6 +540,7 @@ class DRcycleGAN3D(object):
 				self.train_hist['D_3D_loss_id'].append(D_3D_loss_real_id.data[0])
 				self.train_hist['D_3D_loss_pcode'].append(D_3D_loss_real_pcode.data[0])
 				self.train_hist['D_3D_loss_GAN_fake'].append(D_3D_loss_GANfake.data[0])
+				self.train_hist['D_3D_acc'].append(D_3D_acc)
 
 
 				# update D_2D network
@@ -544,7 +551,7 @@ class DRcycleGAN3D(object):
 				D_2D_loss_real_id = self.CE_loss(D_2D_id, y_id_)
 				D_2D_loss_real_pcode = self.CE_loss(D_2D_pcode, y_pcode_)
 
-				x2D_hat = self.G_3Dto2D(x3D_, y_pcode_onehot_, z_)
+				x2D_hat = self.G_3Dto2D(x3D_, y_random_pcode_onehot_, z_)
 				D_2D_GAN_fake, _, _ = self.D_2D(x2D_hat)
 				D_2D_loss_GANfake = self.BCE_loss(D_2D_GAN_fake, self.y_fake_)
 
@@ -563,6 +570,7 @@ class DRcycleGAN3D(object):
 				self.train_hist['D_2D_loss_id'].append(D_2D_loss_real_id.data[0])
 				self.train_hist['D_2D_loss_pcode'].append(D_2D_loss_real_pcode.data[0])
 				self.train_hist['D_2D_loss_GAN_fake'].append(D_2D_loss_GANfake.data[0])
+				self.train_hist['D_2D_acc'].append(D_2D_acc)
 
 
 				# update G_2Dto3D and G_3Dto2D network
@@ -571,25 +579,33 @@ class DRcycleGAN3D(object):
 					self.G_3Dto2D_optimizer.zero_grad()
 	
 					# simple GAN loss
-					x3D_hat = self.G_2Dto3D(x2D_, y_pcode_onehot_, z_)
+					x3D_hat = self.G_2Dto3D(x2D_, y_random_pcode_onehot_, z_)
 					D_3D_fake_GAN, D_3D_fake_id, D_3D_fake_pcode = self.D_3D(x3D_hat)
 					G_3D_loss_GANfake = self.BCE_loss(D_3D_fake_GAN, self.y_real_)
 					G_3D_loss_id = self.CE_loss(D_3D_fake_id, y_id_)
-					G_3D_loss_pcode = self.CE_loss(D_3D_fake_pcode, y_pcode_)
+					G_3D_loss_pcode = self.CE_loss(D_3D_fake_pcode, y_random_pcode_)
 					G_3D_loss = G_3D_loss_GANfake + G_3D_loss_id + G_3D_loss_pcode 
 
-					x2D_hat = self.G_3Dto2D(x3D_, y_pcode_onehot_, z_)
+					x2D_hat = self.G_3Dto2D(x3D_, y_random_pcode_onehot_, z_)
 					D_2D_fake_GAN, D_2D_fake_id, D_2D_fake_pcode = self.D_2D(x2D_hat)
 					G_2D_loss_GANfake = self.BCE_loss(D_2D_fake_GAN, self.y_real_)
 					G_2D_loss_id = self.CE_loss(D_2D_fake_id, y_id_)
-					G_2D_loss_pcode = self.CE_loss(D_2D_fake_pcode, y_pcode_)
+					G_2D_loss_pcode = self.CE_loss(D_2D_fake_pcode, y_random_pcode_)
 					G_2D_loss = G_2D_loss_GANfake + G_2D_loss_id + G_2D_loss_pcode
 
 					x2D_recon = self.G_3Dto2D(x3D_hat, y_pcode_onehot_, z_)
-					G_3Dto2D_cycle_loss = self.MSE_loss(x2D_recon, x2D_)
+					D_cycle_2D_GAN, D_cycle_2D_id, D_cycle_2D_pcode = self.D_2D( x2D_recon )
+					loss_recon = self.MSE_loss(x2D_recon, x2D_)
+					loss_id = self.CE_loss( D_cycle_2D_id, y_id_ )
+					loss_pose = self.CE_loss( D_cycle_2D_pcode, y_pcode_ )
+					G_3Dto2D_cycle_loss = loss_recon + loss_id + loss_pose
 
 					x3D_recon = self.G_2Dto3D(x2D_hat, y_pcode_onehot_, z_)
-					G_2Dto3D_cycle_loss = self.MSE_loss(x3D_recon, x3D_)
+					D_cycle_3D_GAN, D_cycle_3D_id, D_cycle_3D_pcode = self.D_3D( x3D_recon )
+					loss_recon = self.MSE_loss(x3D_recon, x3D_)
+					loss_id = self.CE_loss( D_cycle_3D_id, y_id_ )
+					loss_pose = self.CE_loss( D_cycle_3D_pcode, y_pcode_ )
+					G_2Dto3D_cycle_loss = loss_recon + loss_id + loss_pose
 
 					if iG == 0:
 						self.train_hist['G_3D_loss'].append(G_3D_loss.data[0])
@@ -634,6 +650,7 @@ class DRcycleGAN3D(object):
 
 	def visualize_results(self, epoch, fix=True):
 		self.G_2Dto3D.eval()
+		self.G_3Dto2D.eval()
 
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
