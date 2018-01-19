@@ -172,11 +172,11 @@ class Bosphorus( Dataset ):
 		# load point cloud and fill voxel
 		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
 		if self.use_colorPCL:
-			pcl = bnt2voxel_wColor( bnt_data, image_original, self.shape )
+			voxel = bnt2voxel_wColor( bnt_data, image_original, self.shape )
 		else:
-			pcl = bnt2voxel( bnt_data, self.shape )
+			voxel = bnt2voxel( bnt_data, self.shape )
 		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
-		pcl = torch.Tensor( pcl )
+		voxel = torch.Tensor( voxel )
 
 		try:
 			identity = int(identity[2:])
@@ -189,9 +189,9 @@ class Bosphorus( Dataset ):
 					'pclass': poseclass,
 					'pcode': posecode }
 		if self.use_image:
-			return pcl, labels, image
+			return voxel, labels, image
 		else:
-			return pcl, labels
+			return voxel, labels
 
 class MultiPie( Dataset ):
 	def __init__( self, root_dir, transform=None, cam_ids=None):
