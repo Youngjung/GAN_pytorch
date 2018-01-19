@@ -1,4 +1,4 @@
-import utils, torch, time, os, pickle, imageio
+import utils, torch, time, os, pickle, imageio, math
 from scipy.misc import imsave
 import numpy as np
 import torch.nn as nn
@@ -242,10 +242,14 @@ class DRGAN3D(object):
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 		nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
+		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.png')
 		utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
 
 		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.npy')
 		self.sample_x3D_.numpy().squeeze().dump( fname )
+
+		# save volume of 3D space
+		self.volume = sample_x3D_[0,0].numel()
 
 		if self.gpu_mode:
 			self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
@@ -286,6 +290,7 @@ class DRGAN3D(object):
 		self.train_hist['D_loss_id'] = []
 		self.train_hist['D_loss_pcode'] = []
 		self.train_hist['D_loss_GAN_fake'] = []
+		self.train_hist['D_acc'] = []
 		self.train_hist['G_loss'] = []
 		self.train_hist['G_loss'] = []
 		self.train_hist['G_loss_GAN_fake'] = []
@@ -402,6 +407,7 @@ class DRGAN3D(object):
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
 					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
 #					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+#					G_loss_recon = torch.sum(torch.mul(x3D_hat[:,0:1], (x3D_hat[:,1:4]-x3D_[:,1:4])**2 )) / self.volume
 					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode # + G_loss_recon
 
 					if iG == 0:
@@ -428,7 +434,9 @@ class DRGAN3D(object):
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			self.save()
-			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
+			utils.loss_plot(self.train_hist,
+							os.path.join(self.save_dir, self.dataset, self.model_name),
+							self.model_name, use_subplot=True)
 			self.visualize_results((epoch+1))
 
 		self.train_hist['total_time'].append(time.time() - start_time)
@@ -437,7 +445,9 @@ class DRGAN3D(object):
 		print("Training finish!... save training results")
 
 		self.save()
-		utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
+		utils.loss_plot(self.train_hist,
+						os.path.join(self.save_dir, self.dataset, self.model_name),
+						self.model_name, use_subplot=True)
 
 
 	def visualize_results(self, epoch, fix=True):
