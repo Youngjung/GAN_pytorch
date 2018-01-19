@@ -399,6 +399,8 @@ def loss_plot(hist, path='.', model_name='model', y_max=None, use_subplot=False,
 	plt.ylabel('Loss')
 	plt.tight_layout()
 
+	if len(keys_to_show) == 0:
+		keys_to_show = hist.keys()
 	for key,value in hist.iteritems():
 		if 'time' in key or key not in keys_to_show:
 			continue
