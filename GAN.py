@@ -110,6 +110,8 @@ class GAN(object):
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
 		self.model_name = args.gan_type
+		if len(args.comment) > 0:
+			self.model_name += '_' + args.comment
 
 		# networks init
 		self.G = generator(self.dataset)
