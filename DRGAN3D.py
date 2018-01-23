@@ -205,7 +205,7 @@ class DRGAN3D(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
 											transform=transforms.ToTensor(),
-											shape=(128,128,128), image_shape=256),
+											shape=128, image_shape=256),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
@@ -401,14 +401,14 @@ class DRGAN3D(object):
 				for iG in range(4):
 					self.G_optimizer.zero_grad()
 	
-					x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
+					x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
-					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
-#					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
+					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
 #					G_loss_recon = torch.sum(torch.mul(x3D_hat[:,0:1], (x3D_hat[:,1:4]-x3D_[:,1:4])**2 )) / self.volume
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode # + G_loss_recon
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
 
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])

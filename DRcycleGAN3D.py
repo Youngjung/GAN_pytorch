@@ -74,7 +74,7 @@ class Encoder3D( nn.Module ):
 
 
 class Decoder2D( nn.Module ):
-	def __init__(self, Npcode, Nz, nOutputCh=4):
+	def __init__(self, Npcode, Nz, nOutputCh=3):
 		super(Decoder2D, self).__init__()
 		self.nOutputCh = nOutputCh
 
@@ -103,7 +103,7 @@ class Decoder2D( nn.Module ):
 			nn.ConvTranspose2d(64*2, 64, 4, 2, 1, bias=False), # 64 -> 128
 			nn.BatchNorm2d(64),
 			nn.ReLU(True),
-			nn.ConvTranspose2d(64, 3, 4, 2, 1, bias=False), # 128 -> 256
+			nn.ConvTranspose2d(64, nOutputCh, 4, 2, 1, bias=False), # 128 -> 256
 			nn.Sigmoid()
 		)
 	def forward(self, fx, y_pcode_onehot, z):
@@ -352,12 +352,13 @@ class DRcycleGAN3D(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
 											transform=transforms.ToTensor(),
-											shape=(128,128,128), image_shape=256),
+											shape=128, image_shape=256),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
+		print( 'Generating fixed sample for visualization...' )
 		nPcodes = self.Npcode//4
 		nSamples = self.nSamples2visualize-nPcodes
 		sample_x2D_s = []
@@ -427,6 +428,8 @@ class DRcycleGAN3D(object):
 			self.BCE_loss = nn.BCELoss()
 			self.MSE_loss = nn.MSELoss()
 			self.L1_loss = nn.L1Loss()
+
+		print('init done')
 
 #		print('---------- Networks architecture -------------')
 #		utils.print_network(self.G)
@@ -594,18 +597,18 @@ class DRcycleGAN3D(object):
 					G_2D_loss = G_2D_loss_GANfake + G_2D_loss_id + G_2D_loss_pcode
 
 					x2D_recon = self.G_3Dto2D(x3D_hat, y_pcode_onehot_, z_)
-					D_cycle_2D_GAN, D_cycle_2D_id, D_cycle_2D_pcode = self.D_2D( x2D_recon )
-					loss_recon = self.MSE_loss(x2D_recon, x2D_)
-					loss_id = self.CE_loss( D_cycle_2D_id, y_id_ )
-					loss_pose = self.CE_loss( D_cycle_2D_pcode, y_pcode_ )
-					G_3Dto2D_cycle_loss = loss_recon + loss_id + loss_pose
+#					D_cycle_2D_GAN, D_cycle_2D_id, D_cycle_2D_pcode = self.D_2D( x2D_recon )
+					loss_recon2D = self.L1_loss(x2D_recon, x2D_)
+#					loss_id = self.CE_loss( D_cycle_2D_id, y_id_ )
+#					loss_pose = self.CE_loss( D_cycle_2D_pcode, y_pcode_ )
+#					G_3Dto2D_cycle_loss = loss_recon + loss_id + loss_pose
 
 					x3D_recon = self.G_2Dto3D(x2D_hat, y_pcode_onehot_, z_)
-					D_cycle_3D_GAN, D_cycle_3D_id, D_cycle_3D_pcode = self.D_3D( x3D_recon )
-					loss_recon = self.MSE_loss(x3D_recon, x3D_)
-					loss_id = self.CE_loss( D_cycle_3D_id, y_id_ )
-					loss_pose = self.CE_loss( D_cycle_3D_pcode, y_pcode_ )
-					G_2Dto3D_cycle_loss = loss_recon + loss_id + loss_pose
+#					D_cycle_3D_GAN, D_cycle_3D_id, D_cycle_3D_pcode = self.D_3D( x3D_recon )
+					loss_recon3D = self.MSE_loss(x3D_recon, x3D_)
+#					loss_id = self.CE_loss( D_cycle_3D_id, y_id_ )
+#					loss_pose = self.CE_loss( D_cycle_3D_pcode, y_pcode_ )
+#					G_2Dto3D_cycle_loss = loss_recon + loss_id + loss_pose
 
 					if iG == 0:
 						self.train_hist['G_3D_loss'].append(G_3D_loss.data[0])
@@ -617,7 +620,7 @@ class DRcycleGAN3D(object):
 						self.train_hist['G_2D_loss_id'].append(G_2D_loss_id.data[0])
 						self.train_hist['G_2D_loss_pcode'].append(G_2D_loss_pcode.data[0])
 	
-					G_loss = G_2D_loss + G_3D_loss + G_3Dto2D_cycle_loss + G_2Dto3D_cycle_loss
+					G_loss = G_2D_loss + G_3D_loss + 10*loss_recon2D + 10*loss_recon3D
 					G_loss.backward()
 
 					self.G_2Dto3D_optimizer.step()
