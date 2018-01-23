@@ -17,6 +17,7 @@ from DRGAN3D import DRGAN3D
 from Recog3D import Recog3D
 from VAEDRGAN3D import VAEDRGAN3D
 from DRcycleGAN3D import DRcycleGAN3D
+from CycleGAN3D import CycleGAN3D
 
 """parsing and configuration"""
 def parse_args():
@@ -24,7 +25,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description=desc)
 
 	parser.add_argument('--gan_type', type=str, default='EBGAN',
-						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE', 'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D'],
+						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN', 'DRGAN', 'AE', 'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D'],
 						help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='mnist', 
 						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus'],
@@ -139,6 +140,8 @@ def main():
 		gan = VAEDRGAN3D(opts)
 	elif opts.gan_type == 'DRcycleGAN3D':
 		gan = DRcycleGAN3D(opts)
+	elif opts.gan_type == 'CycleGAN3D':
+		gan = CycleGAN3D(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
