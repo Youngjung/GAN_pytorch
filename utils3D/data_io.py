@@ -62,10 +62,10 @@ def bnt2voxel_wColor(pcl, image, shape=(64,64,64), fill_mass=False):
 	xmax, ymax, zmax = maxs
 	xmin, ymin, zmin = mins
 	raw_shape = [m-n+1 for m,n in zip(maxs,mins)]
-	ratio = [float(s)/v for (s,v) in zip(shape,raw_shape)]
+	ratio = [float(shape)/v for v in raw_shape]
 	ratio_min = min(ratio)
 	ratio = [ratio_min,ratio_min,ratio_min]
-	shape = (4,)+shape
+	shape = (4,)+(shape,)*3
 	voxel = np.zeros(shape)
 	if fill_mass:
 		try:
