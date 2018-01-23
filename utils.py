@@ -150,10 +150,6 @@ class Bosphorus( Dataset ):
 		return len( self.filenames )
 	
 	def __getitem__( self, idx ):
-		# parsing
-		basename = os.path.basename( self.filenames[idx] )
-		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
-
 		# load image
 		if self.use_image or self.use_colorPCL:
 			image = Image.open( self.filenames[idx][:-len(self.suffix)]+'.png' )
@@ -175,9 +171,12 @@ class Bosphorus( Dataset ):
 			voxel = bnt2voxel_wColor( bnt_data, image_original, self.shape )
 		else:
 			voxel = bnt2voxel( bnt_data, self.shape )
-		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
 		voxel = torch.Tensor( voxel )
 
+		# parsing
+		basename = os.path.basename( self.filenames[idx] )
+		assert( imfile == (basename[:-len(self.suffix)]+'.png') )
+		identity, poseclass, posecode, samplenum =  basename[:-len(self.suffix)].split('_')
 		try:
 			identity = int(identity[2:])
 			poseclass = self.poseclassmap[poseclass]
@@ -188,6 +187,8 @@ class Bosphorus( Dataset ):
 		labels = { 'id': identity,
 					'pclass': poseclass,
 					'pcode': posecode }
+
+		# return
 		if self.use_image:
 			return voxel, labels, image
 		else:
