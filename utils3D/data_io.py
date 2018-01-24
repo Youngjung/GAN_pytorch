@@ -55,18 +55,20 @@ def bnt2voxel(pcl,shape=(64,64,64),fill_mass=False):
 			print( int(x)-xmin,int(y)-ymin,int(z)-zmin )
 	return voxel
 
-def bnt2voxel_wColor(pcl, image, shape=(64,64,64), fill_mass=False):
+def bnt2voxel_wColor(pcl, image, shape=64, fill_mass=False):
 	# compute ratio
 	maxs = pcl[:,:3].max(0)
 	mins = pcl[:,:3].min(0)
+	centers = (maxs + mins)/2
 	xmax, ymax, zmax = maxs
 	xmin, ymin, zmin = mins
-	raw_shape = [m-n+1 for m,n in zip(maxs,mins)]
-	ratio = [float(shape)/v for v in raw_shape]
+	xc, yc, zc = centers
+	raw_shape = maxs-mins
+	ratio =float(shape-1)/raw_shape
 	ratio_min = min(ratio)
 	ratio = [ratio_min,ratio_min,ratio_min]
-	shape = (4,)+(shape,)*3
-	voxel = np.zeros(shape)
+	voxel_shape = (4,)+(shape,)*3
+	voxel = np.zeros(voxel_shape)
 	if fill_mass:
 		try:
 			minminz = int((min(pcl[:,2])-zmin)*ratio[2])
@@ -78,23 +80,23 @@ def bnt2voxel_wColor(pcl, image, shape=(64,64,64), fill_mass=False):
 		x,y,z,u,v = pcl[i]
 		r,g,b = image[:,v*image.shape[1],u*image.shape[2]]
 		try:
-			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
+			xx,yy,zz = int(x)-xc,int(y)-yc,int(z)-zc
 
 			if fill_mass:
-				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = 1
-				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = r
-				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = g
-				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = b
+				voxel[0,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = 1
+				voxel[1,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = r
+				voxel[2,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = g
+				voxel[3,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = b
 			else:
-				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
-				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = r
-				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = g
-				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = b
+				voxel[0,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = 1
+				voxel[1,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = r
+				voxel[2,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = g
+				voxel[3,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = b
 		except:
 			print( x,y,z )
-			print( int(x)-xmin,int(y)-ymin,int(z)-zmin )
-#	np.expand_dims(voxel,0).dump('Bosphorus_temp/voxel_data_resized.npy')
-#	pdb.set_trace()
+			print( xx,yy,zz )
+			print( xx*ratio[0]+shape/2, yy*ratio[1]+shape/2, zz*ratio[2]+shape/2 )
+			pdb.set_trace()
 	return voxel
 
 
