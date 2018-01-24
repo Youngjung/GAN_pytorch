@@ -41,7 +41,10 @@ class generator(nn.Module):
 			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
 			nn.ReLU(),
-			nn.ConvTranspose3d(64, 1, 4, 2, 1, bias=False),
+			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(32),
+			nn.ReLU(),
+			nn.ConvTranspose3d(32, 4, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
@@ -56,7 +59,7 @@ class generator(nn.Module):
 class discriminator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, dataset = 'mnist'):
+	def __init__(self, dataset = 'mnist', nInputCh=4):
 		super(discriminator, self).__init__()
 		if dataset == 'ShapeNet':
 			self.input_height = 64 
@@ -72,7 +75,10 @@ class discriminator(nn.Module):
 			self.output_dim = 1
 
 		self.conv = nn.Sequential(
-			nn.Conv3d(1, 64, 4, 2, 1, bias=False),
+			nn.Conv3d(nInputCh, 32, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(32),
+			nn.LeakyReLU(0.2),
+			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(64, 128, 4, 2, 1, bias=False),
@@ -142,7 +148,9 @@ class GAN3D(object):
 			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'Bosphorus':
-			self.data_loader = DataLoader( utils.Bosphorus(data_dir),
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
+											transform=transforms.ToTensor(),
+											shape=128, image_shape=256),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		else:
 			exit("unknown dataset: " + self.dataset)
@@ -174,15 +182,19 @@ class GAN3D(object):
 		else:
 			self.y_real_, self.y_fake_ = Variable(torch.ones(self.batch_size, 1)), Variable(torch.zeros(self.batch_size, 1))
 
-		self.D.train()
 		print('training start!!')
+		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+
 		start_time = time.time()
+		self.D.train()
 		for epoch in range(self.epoch):
 			self.G.train()
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
 
-			for iB, (x_, _) in enumerate(self.data_loader):
+			for iB, (x_, _, _) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
@@ -202,7 +214,7 @@ class GAN3D(object):
 				num_correct_real = torch.sum(D_real>0.5)
 
 				G_ = self.G(z_)
-				D_fake = self.D(G_)
+				D_fake = self.D(G_.detach())
 				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 				num_correct_fake = torch.sum(D_fake<0.5)
 
@@ -258,12 +270,11 @@ class GAN3D(object):
 					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, G_loss: %.4f, D_acc:%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size,
 						  D_loss.data[0], G_loss.data[0], D_acc))
+					utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			print("dumping x_hat from epoch {}".format(epoch+1))
 			self.dump_x_hat((epoch+1))
-#			self.visualize_results((epoch+1))
-			self.save()
 			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 		self.train_hist['total_time'].append(time.time() - start_time)
@@ -272,7 +283,6 @@ class GAN3D(object):
 		print("Training finish!... save training results")
 
 		self.save()
-#		utils.generate_animation(self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name, self.epoch)
 		utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 	def dump_x_hat(self, epoch, iB=0, fix=True):
