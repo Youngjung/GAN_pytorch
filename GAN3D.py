@@ -327,34 +327,35 @@ class GAN3D(object):
 
 
 	def visualize_results(self, epoch, fix=True):
-		self.G.eval()
-
-		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
-			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-
-		if fix:
-			""" fixed noise """
-			samples = self.G(self.sample_z_)
-		else:
-			""" random noise """
-			if self.gpu_mode:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
-			else:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
-
-			samples = self.G(sample_z_)
-
-		samples = samples>0.5
-
-		if self.gpu_mode:
-			samples = samples.cpu().data.numpy().squeeze()
-		else:
-			samples = samples.data.numpy().squeeze()
-
-		for i in range( self.test_sample_size ):
-			filename = os.path.join( self.result_dir, self.dataset, self.model_name,
-										self.model_name+'_e%03d_sample%02d.png'%(epoch,i))
-			plot_voxel( samples[i] , save_file=filename )
+		self.dump_xhat( epoch, fix=fix )
+#		self.G.eval()
+#
+#		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
+#			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
+#
+#		if fix:
+#			""" fixed noise """
+#			samples = self.G(self.sample_z_)
+#		else:
+#			""" random noise """
+#			if self.gpu_mode:
+#				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
+#			else:
+#				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
+#
+#			samples = self.G(sample_z_)
+#
+#		samples = samples>0.5
+#
+#		if self.gpu_mode:
+#			samples = samples.cpu().data.numpy().squeeze()
+#		else:
+#			samples = samples.data.numpy().squeeze()
+#
+#		for i in range( self.test_sample_size ):
+#			filename = os.path.join( self.result_dir, self.dataset, self.model_name,
+#										self.model_name+'_e%03d_sample%02d.png'%(epoch,i))
+#			plot_voxel( samples[i] , save_file=filename )
 
 	def save(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
