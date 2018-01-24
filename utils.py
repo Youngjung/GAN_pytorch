@@ -215,7 +215,7 @@ class MultiPie( Dataset ):
 		fname_cache = 'cache_multipie.txt'
 		if os.path.exists(fname_cache):
 			self.filenames = open(fname_cache).read().splitlines()
-			print( 'restored from {}'.format(fname_cache) )
+			print( 'restored from {} : {} samples'.format(fname_cache, len(self.filenames)) )
 		else:
 			path = os.path.join( root_dir, 'Multi-Pie', 'data' )
 			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(path)
@@ -236,19 +236,8 @@ class MultiPie( Dataset ):
 		self.subj_map = {}
 		for i, subj in enumerate( self.subj_ids ):
 			self.subj_map[subj] = i
-#		print('shuffling...', end='')
-#		sys.stdout.flush()
-#		time_start = time.time()
-#		seed = 547
-#		np.random.seed(seed)
-#		shuffler = np.arange( len(filenames) )
-#		np.random.shuffle(shuffler)
-#
-#		shuffler = shuffler.tolist()
-#		self.filenames = [filenames[s] for s in shuffler]
-#		print('{:.0f}sec'.format( time.time()-time_start))
-#		sys.stdout.flush()
-		
+		print( '{} samples remain after filtering'.format( len(self.filenames) ) )
+	
 
 	def __len__( self ):
 		return len( self.filenames )
