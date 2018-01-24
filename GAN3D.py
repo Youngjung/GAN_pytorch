@@ -134,8 +134,10 @@ class GAN3D(object):
 			self.G.cuda()
 			self.D.cuda()
 			self.BCE_loss = nn.BCELoss().cuda()
+			self.L1_loss = nn.L1Loss().cuda()
 		else:
 			self.BCE_loss = nn.BCELoss()
+			self.L1_loss = nn.L1Loss()
 
 #		print('---------- Networks architecture -------------')
 #		utils.print_network(self.G)
@@ -187,6 +189,7 @@ class GAN3D(object):
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 
+		eps = 1e-6
 		start_time = time.time()
 		self.D.train()
 		for epoch in range(self.epoch):
@@ -257,7 +260,16 @@ class GAN3D(object):
 				G_ = self.G(z_)
 				D_fake = self.D(G_)
 
-				G_loss = self.BCE_loss(D_fake, self.y_real_)
+				G_projected = torch.div( 
+										torch.sum( torch.mul(G_[:,0:1,:,:,:], G_[:,1:4,:,:,:]), 4 ),
+										torch.sum(G_[:,0:1,:,:,:],4)+eps
+										)
+				x_projected = torch.div(
+										torch.sum( torch.mul(x_[:,0:1,:,:,:], x_[:,1:4,:,:,:]), 4 ),
+										torch.sum(x_[:,0:1,:,:,:],4)+eps
+										)
+
+				G_loss = self.BCE_loss(D_fake, self.y_real_) + self.L1_loss(G_projected, x_projected)
 				self.train_hist['G_loss'].append(G_loss.data[0])
 
 				G_loss.backward()
