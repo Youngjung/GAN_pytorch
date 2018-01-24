@@ -287,6 +287,7 @@ class GAN3D(object):
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			print("dumping x_hat from epoch {}".format(epoch+1))
 			self.dump_x_hat((epoch+1))
+			self.save()
 			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 		self.train_hist['total_time'].append(time.time() - start_time)
