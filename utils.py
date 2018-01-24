@@ -146,6 +146,8 @@ class Bosphorus( Dataset ):
 		for i, posecode in enumerate( self.posecodes ):
 			self.posecodemap[posecode] = i
 
+		print( 'Loading Bosphorus done' )
+
 	def __len__( self ):
 		return len( self.filenames )
 	
