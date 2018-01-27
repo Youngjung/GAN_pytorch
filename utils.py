@@ -382,7 +382,14 @@ def loss_plot(hist, path='.', model_name='model', y_max=None, use_subplot=False,
 	try:
 		x = range(len(hist['D_loss']))
 	except:
-		x = range(len(hist['D_3D_loss']))
+		keys = hist.keys()
+		losskey = [ k for k in keys if 'loss' in k ]
+		losskey = losskey[0]
+		try:
+			x = range(len(hist[losskey]))
+		except:
+			print( 'loss plot failed, continuing...' )
+			return
 
 	if use_subplot:
 		f, axarr = plt.subplots(2, sharex=True)
