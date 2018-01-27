@@ -280,7 +280,6 @@ class CycleGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.nSamples2visualize = 9 
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -335,7 +334,7 @@ class CycleGAN3D(object):
 
 		# fixed samples for reconstruction visualization
 		print( 'Generating fixed sample for visualization...' )
-		nSamples = self.nSamples2visualize
+		nSamples = self.sample_num
 		sample_x2D_s = []
 		sample_x3D_s = []
 		for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
@@ -587,7 +586,7 @@ class CycleGAN3D(object):
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 
-		nRows = int( math.ceil( math.sqrt( self.nSamples2visualize ) ) )
+		nRows = int( math.ceil( math.sqrt( self.sample_num ) ) )
 		nCols = nRows
 
 		""" fixed noise """

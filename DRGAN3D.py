@@ -145,7 +145,7 @@ class DRGAN3D(object):
 	def __init__(self, args):
 		# parameters
 		self.epoch = args.epoch
-		self.sample_num = 16
+		self.sample_num = 49 
 		self.batch_size = args.batch_size
 		self.save_dir = args.save_dir
 		self.result_dir = args.result_dir
@@ -161,7 +161,6 @@ class DRGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.nSamples2visualize = 49
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -211,7 +210,7 @@ class DRGAN3D(object):
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
-		nSamples = self.nSamples2visualize-self.Npcode
+		nSamples = self.sample_num-self.Npcode
 		nPcodes = self.Npcode
 		sample_x2D_s = []
 		sample_x3D_s = []

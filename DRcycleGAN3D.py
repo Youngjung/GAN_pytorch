@@ -288,7 +288,7 @@ class DRcycleGAN3D(object):
 	def __init__(self, args):
 		# parameters
 		self.epoch = args.epoch
-		self.sample_num = 16
+		self.sample_num = 19
 		self.batch_size = args.batch_size
 		self.save_dir = args.save_dir
 		self.result_dir = args.result_dir
@@ -304,7 +304,6 @@ class DRcycleGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.nSamples2visualize = 19
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -360,7 +359,7 @@ class DRcycleGAN3D(object):
 		# fixed samples for reconstruction visualization
 		print( 'Generating fixed sample for visualization...' )
 		nPcodes = self.Npcode//4
-		nSamples = self.nSamples2visualize-nPcodes
+		nSamples = self.sample_num-nPcodes
 		sample_x2D_s = []
 		sample_x3D_s = []
 		for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
@@ -658,7 +657,7 @@ class DRcycleGAN3D(object):
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 
-		nRows = int( math.ceil( math.sqrt( self.nSamples2visualize ) ) )
+		nRows = int( math.ceil( math.sqrt( self.sample_num) ) )
 		nCols = nRows
 
 		""" fixed noise """
