@@ -295,6 +295,7 @@ class DRGAN3D(object):
                            'G_loss_GAN_fake',
                            'G_loss_id',
                            'G_loss_pcode',
+                           'G_loss_recon',
                            'per_epoch_time',
                            'total_time']
 
@@ -415,20 +416,20 @@ class DRGAN3D(object):
 				for iG in range(4):
 					self.G_optimizer.zero_grad()
 	
-					x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
+					x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
-					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
-#					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode #+ G_loss_recon
+					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
+					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
 
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
 						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
 						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
-#						self.train_hist['G_loss_recon'].append(G_loss_pcode.data[0])
+						self.train_hist['G_loss_recon'].append(G_loss_pcode.data[0])
 	
 					G_loss.backward()
 					self.G_optimizer.step()
