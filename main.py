@@ -153,6 +153,7 @@ def main():
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
 	if opts.resume or opts.generate:
+		print(" [*] Loading saved model...")
 		gan.load()
 		print(" [*] Loading finished!")
 

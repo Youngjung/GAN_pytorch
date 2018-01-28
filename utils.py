@@ -404,6 +404,9 @@ def loss_plot(hist, path='.', model_name='model', y_max=None, use_subplot=False,
 		if 'time' in key or key not in keys_to_show:
 			continue
 		y = value
+		if len(x) != len(y):
+			print('[warning] loss_plot() found mismatching dimensions: {}'.format(key))
+			continue
 		if use_subplot and 'acc' in key:
 			axarr[1].plot(x, y, label=key)
 		elif use_subplot:
