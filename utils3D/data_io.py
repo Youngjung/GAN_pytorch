@@ -80,8 +80,8 @@ def bnt2voxel_wColor(pcl, image, shape=64, fill_mass=False):
 		x,y,z,u,v = pcl[i]
 		r,g,b = image[:,v*image.shape[1],u*image.shape[2]]
 		try:
-#			xx,yy,zz = int(x)-xc,int(y)-yc,int(z)-zc
-			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
+			xx,yy,zz = int(x)-xc,int(y)-yc,int(z)-zc
+#			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
 
 			if fill_mass:
 				voxel[0,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = 1
@@ -89,14 +89,14 @@ def bnt2voxel_wColor(pcl, image, shape=64, fill_mass=False):
 				voxel[2,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = g
 				voxel[3,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = b
 			else:
-				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
-				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = r
-				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = g
-				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = b
-#				voxel[0,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = 1
-#				voxel[1,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = r
-#				voxel[2,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = g
-#				voxel[3,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = b
+#				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
+#				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = r
+#				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = g
+#				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = b
+				voxel[0,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = 1
+				voxel[1,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = r
+				voxel[2,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = g
+				voxel[3,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = b
 		except:
 			print( x,y,z )
 			print( xx,yy,zz )
