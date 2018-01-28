@@ -210,6 +210,7 @@ class DRGAN3D(object):
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
+		print( 'Generating fixed sample for visualization...' )
 		nSamples = self.sample_num-self.Npcode
 		nPcodes = self.Npcode
 		sample_x2D_s = []
@@ -283,20 +284,34 @@ class DRGAN3D(object):
 
 
 	def train(self):
-		self.train_hist = {}
-		self.train_hist['D_loss'] = []
-		self.train_hist['D_loss_GAN_real'] = []
-		self.train_hist['D_loss_id'] = []
-		self.train_hist['D_loss_pcode'] = []
-		self.train_hist['D_loss_GAN_fake'] = []
-		self.train_hist['D_acc'] = []
-		self.train_hist['G_loss'] = []
-		self.train_hist['G_loss'] = []
-		self.train_hist['G_loss_GAN_fake'] = []
-		self.train_hist['G_loss_id'] = []
-		self.train_hist['G_loss_pcode'] = []
-		self.train_hist['per_epoch_time'] = []
-		self.train_hist['total_time'] = []
+		train_hist_keys = ['D_loss',
+                           'D_loss_GAN_real',
+                           'D_loss_id',
+                           'D_loss_pcode',
+                           'D_loss_GAN_fake',
+                           'D_acc',
+                           'G_loss',
+                           'G_loss',
+                           'G_loss_GAN_fake',
+                           'G_loss_id',
+                           'G_loss_pcode',
+                           'per_epoch_time',
+                           'total_time']
+
+		if not hasattr(self, 'epoch_start'):
+			self.epoch_start = 0
+		if not hasattr(self, 'train_hist') :
+			self.train_hist = {}
+			for key in train_hist_keys:
+				self.train_hist[key] = []
+		else:
+			existing_keys = self.train_hist.keys()
+			num_hist = [len(self.train_hist[key]) for key in existing_keys]
+			num_hist = max(num_hist)
+			for key in train_hist_keys:
+				if key not in existing_keys:
+					self.train_hist[key] = [0]*num_hist
+					print('new key added: {}'.format(key))
 
 		if self.gpu_mode:
 			self.y_real_ = Variable((torch.ones(self.batch_size,1)).cuda())
@@ -306,9 +321,9 @@ class DRGAN3D(object):
 			self.y_fake_ = Variable((torch.zeros(self.batch_size,1)))
 
 		#self.D.train()
-		print('training start!!')
 		start_time = time.time()
-		for epoch in range(self.epoch):
+		print('training start from epoch {}!!'.format(self.epoch_start))
+		for epoch in range(self.epoch_start, self.epoch):
 			self.G.train()
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
@@ -400,20 +415,20 @@ class DRGAN3D(object):
 				for iG in range(4):
 					self.G_optimizer.zero_grad()
 	
-					x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
+					x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
-					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
-					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
-#					G_loss_recon = torch.sum(torch.mul(x3D_hat[:,0:1], (x3D_hat[:,1:4]-x3D_[:,1:4])**2 )) / self.volume
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
+					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
+#					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode #+ G_loss_recon
 
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
 						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
 						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
+#						self.train_hist['G_loss_recon'].append(G_loss_pcode.data[0])
 	
 					G_loss.backward()
 					self.G_optimizer.step()
@@ -493,3 +508,16 @@ class DRGAN3D(object):
 
 		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
 		self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
+
+		try:
+			fhandle = open(os.path.join(save_dir, self.model_name + '_history.pkl'))
+			self.train_hist = pickle.load(fhandle)
+			fhandle.close()
+			
+			self.epoch_start = len(self.train_hist['per_epoch_time'])
+			print( 'loaded epoch {}'.format(self.epoch_start) )
+			print( 'history has following keys:' )
+			print( self.train_hist.keys() )
+		except:
+			print('history is not found and ignored')
+
