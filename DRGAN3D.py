@@ -156,6 +156,7 @@ class DRGAN3D(object):
 		self.num_workers = args.num_workers
 		self.model_name = args.gan_type
 		self.use_GP = args.use_GP
+		self.centerBosphorus = args.centerBosphorus
 		if self.use_GP:
 			self.model_name = self.model_name + '_GP'
 		if len(args.comment) > 0:
@@ -204,7 +205,7 @@ class DRGAN3D(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
 											transform=transforms.ToTensor(),
-											shape=128, image_shape=256),
+											shape=128, image_shape=256, center=self.centerBosphorus),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)

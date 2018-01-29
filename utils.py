@@ -101,7 +101,7 @@ class IKEA(Dataset):
 
 class Bosphorus( Dataset ):
 	def __init__( self, root_dir, transform=None, use_image=False, use_colorPCL=True,
-					skipCodes=[], shape=(64,64,64), image_shape=256):
+					skipCodes=[], shape=64, image_shape=256, center=True):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
@@ -110,8 +110,10 @@ class Bosphorus( Dataset ):
 		self.use_colorPCL = use_colorPCL
 		self.shape = shape
 		self.image_shape = image_shape
+		self.center = center
 
 		print('Loading Bosphorus metadata...', end='')
+		print('\tcenter={}'.format(center))
 		sys.stdout.flush()
 		time_start = time.time()
 
@@ -170,9 +172,9 @@ class Bosphorus( Dataset ):
 		# load point cloud and fill voxel
 		bnt_data, nrows, ncols, imfile = read_bnt( self.filenames[idx] )
 		if self.use_colorPCL:
-			voxel = bnt2voxel_wColor( bnt_data, image_original, self.shape )
+			voxel = bnt2voxel_wColor( bnt_data, image_original, self.shape, self.center )
 		else:
-			voxel = bnt2voxel( bnt_data, self.shape )
+			voxel = bnt2voxel( bnt_data, self.shape, self.center )
 		voxel = torch.Tensor( voxel )
 
 		# parsing

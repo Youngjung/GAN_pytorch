@@ -20,6 +20,14 @@ from DRcycleGAN3D import DRcycleGAN3D
 from CycleGAN3D import CycleGAN3D
 from AE3D import AutoEncoder3D
 
+def str2bool(v):
+	if v.lower() in ('yes', 'true', 't', 'y', '1'):
+		return True
+	elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+		return False
+	else:
+		raise argparse.ArgumentTypeError('Boolean value expected.')
+
 """parsing and configuration"""
 def parse_args():
 	desc = "Pytorch implementation of GAN collections"
@@ -50,12 +58,13 @@ def parse_args():
 	parser.add_argument('--lrD', type=float, default=0.0002)
 	parser.add_argument('--beta1', type=float, default=0.5)
 	parser.add_argument('--beta2', type=float, default=0.999)
-	parser.add_argument('--gpu_mode', type=bool, default=True)
-	parser.add_argument('--use_GP', type=bool, default=False, help='use Gradient Penalty')
+	parser.add_argument('--gpu_mode', type=str2bool, default=True)
+	parser.add_argument('--use_GP', type=str2bool, default=False, help='use Gradient Penalty')
 	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
-	parser.add_argument('--resume', type=bool, default=False, help='resume training from saved model')
-	parser.add_argument('--generate', type=bool, default=False, help='generate samples from saved model')
+	parser.add_argument('--resume', type=str2bool, default=False, help='resume training from saved model')
+	parser.add_argument('--generate', type=str2bool, default=False, help='generate samples from saved model')
+	parser.add_argument('--centerBosphorus', type=str2bool, default=True, help='center Bosphorus PCL in voxel space')
 
 	return check_args(parser.parse_args())
 
@@ -99,6 +108,7 @@ def check_args(opts):
 	except:
 		print('batch size must be larger than or equal to one')
 
+	print( opts )
 	return opts
 
 """main"""

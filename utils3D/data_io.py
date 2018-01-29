@@ -24,38 +24,31 @@ def read_bnt(path):
 	
 	return pcl, nrows, ncols, imfile
 
-def bnt2voxel(pcl,shape=(64,64,64),fill_mass=False):
+def bnt2voxel(pcl,shape=64):
 	# compute ratio
 	maxs = pcl[:,:3].max(0)
 	mins = pcl[:,:3].min(0)
 	xmax, ymax, zmax = maxs
 	xmin, ymin, zmin = mins
 	raw_shape = [m-n+1 for m,n in zip(maxs,mins)]
+	shape = [shape]*3
 	voxel = np.zeros(shape)
 	ratio = [float(s)/v for (s,v) in zip(shape,raw_shape)]
 	ratio_min = min(ratio)
 	ratio = [ratio_min,ratio_min,ratio_min]
-	if fill_mass:
-		try:
-			minminz = int((min(pcl[:,2])-zmin)*ratio[2])
-		except:
-			pdb.set_trace()
 
 	# fill voxel
 	for i in range(pcl.shape[0]):
 		x,y,z,_,_ = pcl[i]
 		try:
 			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
-			if fill_mass:
-				voxel[int(xx*ratio[0]),int(yy*ratio[1]),minminz:int(zz*ratio[2])+1] = 1
-			else:
-				voxel[int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
+			voxel[int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
 		except:
 			print( x,y,z )
 			print( int(x)-xmin,int(y)-ymin,int(z)-zmin )
 	return voxel
 
-def bnt2voxel_wColor(pcl, image, shape=64, fill_mass=False):
+def bnt2voxel_wColor(pcl, image, shape=64, center=True):
 	# compute ratio
 	maxs = pcl[:,:3].max(0)
 	mins = pcl[:,:3].min(0)
@@ -69,34 +62,24 @@ def bnt2voxel_wColor(pcl, image, shape=64, fill_mass=False):
 	ratio = [ratio_min,ratio_min,ratio_min]
 	voxel_shape = (4,)+(shape,)*3
 	voxel = np.zeros(voxel_shape)
-	if fill_mass:
-		try:
-			minminz = int((min(pcl[:,2])-zmin)*ratio[2])
-		except:
-			pdb.set_trace()
 
 	# fill voxel
 	for i in range(pcl.shape[0]):
 		x,y,z,u,v = pcl[i]
 		r,g,b = image[:,v*image.shape[1],u*image.shape[2]]
 		try:
-			xx,yy,zz = int(x)-xc,int(y)-yc,int(z)-zc
-#			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
-
-			if fill_mass:
-				voxel[0,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = 1
-				voxel[1,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = r
-				voxel[2,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = g
-				voxel[3,int(xx*ratio[0]+xd),int(yy*ratio[1]+yd),minminz:int(zz*ratio[2]+zd)+1] = b
-			else:
-#				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
-#				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = r
-#				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = g
-#				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = b
+			if center:
+				xx,yy,zz = int(x)-xc,int(y)-yc,int(z)-zc
 				voxel[0,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = 1
 				voxel[1,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = r
 				voxel[2,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = g
 				voxel[3,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = b
+			else:
+				xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
+				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
+				voxel[1,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = r
+				voxel[2,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = g
+				voxel[3,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = b
 		except:
 			print( x,y,z )
 			print( xx,yy,zz )
