@@ -113,7 +113,7 @@ class Bosphorus( Dataset ):
 		self.center = center
 
 		print('Loading Bosphorus metadata...', end='')
-		print('\tcenter={}'.format(center))
+		print('\t(center={})\t'.format(center), end='')
 		sys.stdout.flush()
 		time_start = time.time()
 
