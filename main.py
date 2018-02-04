@@ -1,4 +1,4 @@
-import argparse, os
+import argparse, os, pickle
 from GAN import GAN
 from CGAN import CGAN
 from LSGAN import LSGAN
@@ -59,12 +59,12 @@ def parse_args():
 	parser.add_argument('--beta1', type=float, default=0.5)
 	parser.add_argument('--beta2', type=float, default=0.999)
 	parser.add_argument('--gpu_mode', type=str2bool, default=True)
-	parser.add_argument('--use_GP', type=str2bool, default=False, help='use Gradient Penalty')
 	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
 	parser.add_argument('--resume', type=str2bool, default=False, help='resume training from saved model')
 	parser.add_argument('--generate', type=str2bool, default=False, help='generate samples from saved model')
 	parser.add_argument('--centerBosphorus', type=str2bool, default=True, help='center Bosphorus PCL in voxel space')
+	parser.add_argument('--loss_option', type=str, default='', help='recon,dist,GP')
 
 	return check_args(parser.parse_args())
 
@@ -82,17 +82,18 @@ def check_args(opts):
 	if not os.path.exists(opts.log_dir):
 		os.makedirs(opts.log_dir)
 
-	if opts.use_GP:
-		GPpart = "_GP"
+	# --loss_option
+	if len(opts.loss_option)>0:
+		option_part = '_'+opts.loss_option
 	else:
-		GPpart = ""
+		option_part = ''
 
 	if len(opts.comment)>0:
 		print( "comment: " + opts.comment )
-		comment_part = "_"+opts.comment
+		comment_part = '_'+opts.comment
 	else:
-		comment_part = ""
-	tempconcat = opts.gan_type+GPpart+comment_part
+		comment_part = ''
+	tempconcat = opts.gan_type+option_part+comment_part
 	print( 'models and loss plot -> ' + os.path.join( opts.save_dir, opts.dataset, tempconcat ) )
 	print( 'results -> ' + os.path.join( opts.result_dir, opts.dataset, tempconcat ) )
 
@@ -109,6 +110,7 @@ def check_args(opts):
 		print('batch size must be larger than or equal to one')
 
 	print( opts )
+
 	return opts
 
 """main"""
