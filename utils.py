@@ -1,5 +1,5 @@
 from __future__ import print_function
-import os, csv, sys, gzip, torch, time
+import os, csv, sys, gzip, torch, time, pickle
 import torch.nn as nn
 import numpy as np
 import scipy.misc
@@ -147,6 +147,15 @@ class Bosphorus( Dataset ):
 		self.posecodemap = {}
 		for i, posecode in enumerate( self.posecodes ):
 			self.posecodemap[posecode] = i
+
+
+		fname_stats = os.path.join( root_dir, 'stats.pkl' )
+		with open( fname_stats ) as fhandle:
+			stats = pickle.load( fhandle )
+		self.muA = stats['muA']
+		self.muB = stats['muB']
+		self.stddevA = stats['stddevA']
+		self.stddevB = stats['stddevB']
 
 		print( 'Loading Bosphorus done' )
 
