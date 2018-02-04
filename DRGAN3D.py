@@ -155,10 +155,11 @@ class DRGAN3D(object):
 		self.gpu_mode = args.gpu_mode
 		self.num_workers = args.num_workers
 		self.model_name = args.gan_type
-		self.use_GP = args.use_GP
 		self.centerBosphorus = args.centerBosphorus
-		if self.use_GP:
-			self.model_name = self.model_name + '_GP'
+		self.loss_option = args.loss_option
+		if len(args.loss_option) > 0:
+			self.model_name = self.model_name + '_' + args.loss_option
+			self.loss_option = args.loss_option.split(',')
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
@@ -175,6 +176,19 @@ class DRGAN3D(object):
 			self.Np = 13
 			self.Ni = 20
 			self.Nz = 50
+
+		# makedirs
+		temp_save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
+		if not os.path.exists(temp_save_dir):
+			os.makedirs(temp_save_dir)
+		temp_result_dir = os.path.join(self.result_dir, self.dataset, self.model_name)
+		if not os.path.exists(temp_result_dir):
+			os.makedirs(temp_result_dir)
+
+		# save args
+		timestamp = time.strftime('%b_%d_%Y_%H;%M')
+		with open(os.path.join(temp_save_dir, self.model_name + '_' + timestamp + '_args.pkl'), 'wb') as fhandle:
+			pickle.dump(args, fhandle)
 
 
 		# load dataset
@@ -211,46 +225,64 @@ class DRGAN3D(object):
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 
 		# fixed samples for reconstruction visualization
-		print( 'Generating fixed sample for visualization...' )
-		nSamples = self.sample_num-self.Npcode
-		nPcodes = self.Npcode
-		sample_x2D_s = []
-		sample_x3D_s = []
-		for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
-			sample_x2D_s.append( sample_x2D_ )
-			sample_x3D_s.append( sample_x3D_ )
-			if iB > nSamples // self.batch_size:
-				break
-		sample_x2D_s = torch.cat( sample_x2D_s )[:nSamples,:,:,:]
-		sample_x3D_s = torch.cat( sample_x3D_s )[:nSamples,:,:,:]
-		sample_x2D_s = torch.split( sample_x2D_s, 1 )
-		sample_x3D_s = torch.split( sample_x3D_s, 1 )
-		sample_x2D_s += (sample_x2D_s[0],)*nPcodes
-		sample_x3D_s += (sample_x3D_s[0],)*nPcodes
-#		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
-#		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
-#		flatten = lambda l: [item for sublist in l for item in sublist]
-		self.sample_x2D_ = torch.cat( sample_x2D_s )
-		self.sample_x3D_ = torch.cat( sample_x3D_s )
-#		sample_x2D_s = [sample_x2D_s[0][0].unsqueeze(0)]*nSamples
-		self.sample_pcode_ = torch.zeros( nSamples+nPcodes, self.Npcode )
-		self.sample_pcode_[:nSamples,0]=1
-		for iS in range( nPcodes ):
-			ii = iS%self.Npcode
-			self.sample_pcode_[iS+nSamples,ii] = 1
-		self.sample_z_ = torch.rand( nSamples+nPcodes, self.Nz )
-
-		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
-			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-		nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
-		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.png')
-		utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
-
-		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.npy')
-		self.sample_x3D_.numpy().squeeze().dump( fname )
-
-		# save volume of 3D space
-		self.volume = sample_x3D_[0,0].numel()
+		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
+		if not os.path.exists( path_sample ):
+			print( 'Generating fixed sample for visualization...' )
+			os.makedirs( path_sample )
+			nSamples = self.sample_num-self.Npcode
+			nPcodes = self.Npcode
+			sample_x2D_s = []
+			sample_x3D_s = []
+			for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
+				sample_x2D_s.append( sample_x2D_ )
+				sample_x3D_s.append( sample_x3D_ )
+				if iB > nSamples // self.batch_size:
+					break
+			sample_x2D_s = torch.cat( sample_x2D_s )[:nSamples,:,:,:]
+			sample_x3D_s = torch.cat( sample_x3D_s )[:nSamples,:,:,:]
+			sample_x2D_s = torch.split( sample_x2D_s, 1 )
+			sample_x3D_s = torch.split( sample_x3D_s, 1 )
+			sample_x2D_s += (sample_x2D_s[0],)*nPcodes
+			sample_x3D_s += (sample_x3D_s[0],)*nPcodes
+	#		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
+	#		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
+	#		flatten = lambda l: [item for sublist in l for item in sublist]
+			self.sample_x2D_ = torch.cat( sample_x2D_s )
+			self.sample_x3D_ = torch.cat( sample_x3D_s )
+	#		sample_x2D_s = [sample_x2D_s[0][0].unsqueeze(0)]*nSamples
+			self.sample_pcode_ = torch.zeros( nSamples+nPcodes, self.Npcode )
+			self.sample_pcode_[:nSamples,0]=1
+			for iS in range( nPcodes ):
+				ii = iS%self.Npcode
+				self.sample_pcode_[iS+nSamples,ii] = 1
+			self.sample_z_ = torch.rand( nSamples+nPcodes, self.Nz )
+	
+			nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
+			fname = os.path.join( path_sample, 'sampleGT.png')
+			utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
+	
+			fname = os.path.join( path_sample, 'sampleGT_2D.npy')
+			self.sample_x2D_.numpy().dump( fname )
+			fname = os.path.join( path_sample, 'sampleGT_3D.npy')
+			self.sample_x3D_.numpy().dump( fname )
+			fname = os.path.join( path_sample, 'sampleGT_z.npy')
+			self.sample_z_.numpy().dump( fname )
+			fname = os.path.join( path_sample, 'sampleGT_pcode.npy')
+			self.sample_pcode_.numpy().dump( fname )
+		else:
+			print( 'Loading fixed sample for visualization...' )
+			fname = os.path.join( path_sample, 'sampleGT_2D.npy')
+			with open( fname ) as fhandle:
+				self.sample_x2D_ = torch.Tensor(pickle.load( fhandle ))
+			fname = os.path.join( path_sample, 'sampleGT_3D.npy')
+			with open( fname ) as fhandle:
+				self.sample_x3D_ = torch.Tensor(pickle.load( fhandle ))
+			fname = os.path.join( path_sample, 'sampleGT_z.npy')
+			with open( fname ) as fhandle:
+				self.sample_z_ = torch.Tensor( pickle.load( fhandle ))
+			fname = os.path.join( path_sample, 'sampleGT_pcode.npy')
+			with open( fname ) as fhandle:
+				self.sample_pcode_ = torch.Tensor( pickle.load( fhandle ))
 
 		if self.gpu_mode:
 			self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
@@ -297,6 +329,7 @@ class DRGAN3D(object):
                            'G_loss_id',
                            'G_loss_pcode',
                            'G_loss_recon',
+                           'G_loss_dist',
                            'per_epoch_time',
                            'total_time']
 
@@ -322,9 +355,14 @@ class DRGAN3D(object):
 			self.y_real_ = Variable((torch.ones(self.batch_size,1)))
 			self.y_fake_ = Variable((torch.zeros(self.batch_size,1)))
 
+		nPairs = self.batch_size*(self.batch_size-1)
+		normalizerA = self.data_loader.dataset.muA/self.data_loader.dataset.stddevA # normalization
+		normalizerB = self.data_loader.dataset.muB/self.data_loader.dataset.stddevB # normalization
+		eps = 1e-16
+
 		#self.D.train()
 		start_time = time.time()
-		print('training start from epoch {}!!'.format(self.epoch_start))
+		print('training start from epoch {}!!'.format(self.epoch_start+1))
 		for epoch in range(self.epoch_start, self.epoch):
 			self.G.train()
 			epoch_start_time = time.time()
@@ -377,7 +415,7 @@ class DRGAN3D(object):
 				D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
 
 				# DRAGAN Loss (Gradient penalty)
-				if self.use_GP:
+				if 'GP' in self.loss_option:
 					if self.gpu_mode:
 						alpha = torch.rand(x2D_.size()).cuda()
 						x2D_hat = Variable(alpha*x2D_.data +
@@ -422,15 +460,41 @@ class DRGAN3D(object):
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
 					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
-					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
+
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
+					if 'recon' in self.loss_option:
+						G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+						G_loss += G_loss_recon
+
+					if 'dist' in self.loss_option:
+						sumA = 0
+						sumB = 0
+						for iA in range(self.batch_size):
+							dist_2D = x2D_[iA]-x2D_ + eps
+							dist_3D = x3D_hat[iA]-x3D_hat + eps
+							normdist_2D = torch.norm(dist_2D.view(self.batch_size,-1),1, dim=1)
+							normdist_3D = torch.norm(dist_3D.view(self.batch_size,-1),1, dim=1)
+							sumA += normdist_2D
+							sumB += normdist_3D
+	
+						sumA /= self.data_loader.dataset.stddevA # normalization
+						sumB /= self.data_loader.dataset.stddevB # normalization
+						sumA /= nPairs # expectation
+						sumB /= nPairs # expectation
+	
+						G_loss_distance = torch.abs( torch.sum( sumA - sumB - normalizerA + normalizerB )) / self.batch_size
+						G_loss += G_loss_distance
+
 
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
 						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
 						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
 						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
-						self.train_hist['G_loss_recon'].append(G_loss_pcode.data[0])
+						if 'recon' in self.loss_option:
+							self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
+						if 'dist' in self.loss_option:
+							self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
 	
 					G_loss.backward()
 					self.G_optimizer.step()
@@ -512,9 +576,8 @@ class DRGAN3D(object):
 		self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
 
 		try:
-			fhandle = open(os.path.join(save_dir, self.model_name + '_history.pkl'))
-			self.train_hist = pickle.load(fhandle)
-			fhandle.close()
+			with open(os.path.join(save_dir, self.model_name + '_history.pkl')) as fhandle:
+				self.train_hist = pickle.load(fhandle)
 			
 			self.epoch_start = len(self.train_hist['per_epoch_time'])
 			print( 'loaded epoch {}'.format(self.epoch_start) )
