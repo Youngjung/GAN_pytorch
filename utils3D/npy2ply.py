@@ -31,6 +31,9 @@ def main():
 	opts = parse_opts()
 	if opts is None:
 		exit()
+
+	if not os.path.exists( opts.dir_dest ):
+		os.makedirs( opts.dir_dest )
 	
 	if len(opts.fname)>0:
 		fnames = [opts.fname]
