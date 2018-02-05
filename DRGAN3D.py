@@ -181,9 +181,13 @@ class DRGAN3D(object):
 		temp_save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 		if not os.path.exists(temp_save_dir):
 			os.makedirs(temp_save_dir)
+		else:
+			print('[warning] path exists: '+temp_save_dir)
 		temp_result_dir = os.path.join(self.result_dir, self.dataset, self.model_name)
 		if not os.path.exists(temp_result_dir):
 			os.makedirs(temp_result_dir)
+		else:
+			print('[warning] path exists: '+temp_result_dir)
 
 		# save args
 		timestamp = time.strftime('%b_%d_%Y_%H;%M')
@@ -305,10 +309,12 @@ class DRGAN3D(object):
 			self.CE_loss = nn.CrossEntropyLoss().cuda()
 			self.BCE_loss = nn.BCELoss().cuda()
 			self.MSE_loss = nn.MSELoss().cuda()
+			self.L1_loss = nn.L1Loss().cuda()
 		else:
 			self.CE_loss = nn.CrossEntropyLoss()
 			self.BCE_loss = nn.BCELoss()
 			self.MSE_loss = nn.MSELoss()
+			self.L1_loss = nn.L1Loss()
 
 #		print('---------- Networks architecture -------------')
 #		utils.print_network(self.G)
@@ -465,6 +471,9 @@ class DRGAN3D(object):
 					if 'recon' in self.loss_option:
 						G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
 						G_loss += G_loss_recon
+					elif 'reconL1' in self.loss_option:
+						G_loss_recon = self.L1_loss(x3D_hat, x3D_)
+						G_loss += G_loss_recon
 
 					if 'dist' in self.loss_option:
 						sumA = 0
@@ -491,13 +500,24 @@ class DRGAN3D(object):
 						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
 						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
 						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
-						if 'recon' in self.loss_option:
+						if 'recon' in self.loss_option or 'reconL1' in self.loss_option:
 							self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
 						if 'dist' in self.loss_option:
 							self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
 	
 					G_loss.backward()
 					self.G_optimizer.step()
+				
+				if 'recon' in self.loss_option and 'dist' in self.loss_option:
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon + G_loss_distance
+				elif 'recon' in self.loss_option :
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
+				elif 'dist' in self.loss_option:
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_distance
+				else:
+					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
+					
+
 	
 				if ((iB + 1) % 10) == 0:
 					secs = time.time()-start_time_epoch
