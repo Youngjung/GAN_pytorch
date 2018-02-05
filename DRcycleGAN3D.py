@@ -298,9 +298,10 @@ class DRcycleGAN3D(object):
 		self.gpu_mode = args.gpu_mode
 		self.num_workers = args.num_workers
 		self.model_name = args.gan_type
-		self.use_GP = args.use_GP
-		if self.use_GP:
-			self.model_name = self.model_name + '_GP'
+		self.loss_option = args.loss_option
+		if len(args.loss_option) > 0:
+			self.model_name = self.model_name + '_' + args.loss_option
+			self.loss_option = args.loss_option.split(',')
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
@@ -619,7 +620,7 @@ class DRcycleGAN3D(object):
 						self.train_hist['G_2D_loss_id'].append(G_2D_loss_id.data[0])
 						self.train_hist['G_2D_loss_pcode'].append(G_2D_loss_pcode.data[0])
 	
-					G_loss = G_2D_loss + G_3D_loss + 10*loss_recon2D + 10*loss_recon3D
+					G_loss = G_2D_loss + G_3D_loss + loss_recon2D + loss_recon3D
 					G_loss.backward()
 
 					self.G_2Dto3D_optimizer.step()
