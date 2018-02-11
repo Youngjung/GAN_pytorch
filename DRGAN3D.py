@@ -423,7 +423,7 @@ class DRGAN3D(object):
 					x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
 					D_GAN_fake, _, _ = self.D(x3D_hat)
 					if 'wass' in self.loss_option:
-						D_loss_GANreal = torch.mean(D_GAN_fake)
+						D_loss_GANfake = torch.mean(D_GAN_fake)
 					else:
 						D_loss_GANfake = self.BCE_loss(D_GAN_fake, self.y_fake_)
 	
@@ -435,9 +435,9 @@ class DRGAN3D(object):
 						if 'wass' in self.loss_option:
 							# gradient penalty from WGAN_GP.py
 							if self.gpu_mode:
-								alpha = torch.rand(x_.size()).cuda()
+								alpha = torch.rand(x3D_.size()).cuda()
 							else:
-								alpha = torch.rand(x_.size())
+								alpha = torch.rand(x3D_.size())
 			
 							x_hat = Variable(alpha * x3D_.data + (1 - alpha) * x3D_hat.data, requires_grad=True)
 			
