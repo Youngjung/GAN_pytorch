@@ -458,55 +458,53 @@ class DRGAN3D(object):
 					self.D_optimizer.step()
 
 				# update G network
-				for iG in range(4):
-					self.G_optimizer.zero_grad()
+				self.G_optimizer.zero_grad()
 	
-					x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
-					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
-					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
-					G_loss_id = self.CE_loss(D_fake_id, y_id_)
-					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
+				x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
+				D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
+				G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
+				G_loss_id = self.CE_loss(D_fake_id, y_id_)
+				G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
 
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
-					if 'recon' in self.loss_option:
-						G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
-						G_loss += G_loss_recon
-					elif 'reconL1' in self.loss_option:
-						G_loss_recon = self.L1_loss(x3D_hat, x3D_)
-						G_loss += G_loss_recon
+				G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
+				if 'recon' in self.loss_option:
+					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+					G_loss += G_loss_recon
+				elif 'reconL1' in self.loss_option:
+					G_loss_recon = self.L1_loss(x3D_hat, x3D_)
+					G_loss += G_loss_recon
 
-					if 'dist' in self.loss_option:
-						sumA = 0
-						sumB = 0
-						for iA in range(self.batch_size):
-							dist_2D = x2D_[iA]-x2D_ + eps
-							dist_3D = x3D_hat[iA]-x3D_hat + eps
-							normdist_2D = torch.norm(dist_2D.view(self.batch_size,-1),1, dim=1)
-							normdist_3D = torch.norm(dist_3D.view(self.batch_size,-1),1, dim=1)
-							sumA += normdist_2D
-							sumB += normdist_3D
+				if 'dist' in self.loss_option:
+					sumA = 0
+					sumB = 0
+					for iA in range(self.batch_size):
+						dist_2D = x2D_[iA]-x2D_ + eps
+						dist_3D = x3D_hat[iA]-x3D_hat + eps
+						normdist_2D = torch.norm(dist_2D.view(self.batch_size,-1),1, dim=1)
+						normdist_3D = torch.norm(dist_3D.view(self.batch_size,-1),1, dim=1)
+						sumA += normdist_2D
+						sumB += normdist_3D
 	
-						sumA /= self.data_loader.dataset.stddevA # normalization
-						sumB /= self.data_loader.dataset.stddevB # normalization
-						sumA /= nPairs # expectation
-						sumB /= nPairs # expectation
+					sumA /= self.data_loader.dataset.stddevA # normalization
+					sumB /= self.data_loader.dataset.stddevB # normalization
+					sumA /= nPairs # expectation
+					sumB /= nPairs # expectation
 	
-						G_loss_distance = torch.abs( torch.sum( sumA - sumB - normalizerA + normalizerB )) / self.batch_size
-						G_loss += G_loss_distance
+					G_loss_distance = torch.abs( torch.sum( sumA - sumB - normalizerA + normalizerB )) / self.batch_size
+					G_loss += G_loss_distance
 
 
-					if iG == 0:
-						self.train_hist['G_loss'].append(G_loss.data[0])
-						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
-						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
-						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
-						if 'recon' in self.loss_option or 'reconL1' in self.loss_option:
-							self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
-						if 'dist' in self.loss_option:
-							self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
+				self.train_hist['G_loss'].append(G_loss.data[0])
+				self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
+				self.train_hist['G_loss_id'].append(G_loss_id.data[0])
+				self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
+				if 'recon' in self.loss_option or 'reconL1' in self.loss_option:
+					self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
+				if 'dist' in self.loss_option:
+					self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
 	
-					G_loss.backward()
-					self.G_optimizer.step()
+				G_loss.backward()
+				self.G_optimizer.step()
 				
 				if 'recon' in self.loss_option and 'dist' in self.loss_option:
 					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon + G_loss_distance
