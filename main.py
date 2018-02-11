@@ -19,6 +19,7 @@ from VAEDRGAN3D import VAEDRGAN3D
 from DRcycleGAN3D import DRcycleGAN3D
 from CycleGAN3D import CycleGAN3D
 from AE3D import AutoEncoder3D
+from DRGAN2D import DRGAN2D 
 
 def str2bool(v):
 	if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -36,7 +37,7 @@ def parse_args():
 	parser.add_argument('--gan_type', type=str, default='EBGAN',
 						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN',
 									'DRGAN', 'AE',
-									'GAN3D', 'VAEGAN3D', 'DRGAN3D',
+									'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'DRGAN2D',
 									'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
 									'AE3D'],
 						help='The type of GAN')#, required=True)
@@ -161,6 +162,8 @@ def main():
 		gan = CycleGAN3D(opts)
 	elif opts.gan_type == 'AE3D':
 		gan = AutoEncoder3D(opts)
+	elif opts.gan_type == 'DRGAN2D':
+		gan = DRGAN2D(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
