@@ -1,5 +1,5 @@
 from __future__ import print_function
-import os, csv, sys, gzip, torch, time, pickle
+import os, csv, sys, gzip, torch, time, pickle, argparse
 import torch.nn as nn
 import numpy as np
 import scipy.misc
@@ -482,3 +482,18 @@ class Inflate(nn.Module):
 	def forward(self, x):
 		shape = x.size() + (1,)*self.nDims2add
 		return x.view(shape)
+
+
+def parse_args():
+	desc = "plot loss"
+	parser = argparse.ArgumentParser(description=desc)
+
+	parser.add_argument('--fname_hist', type=str, default='', help='history path', required=True)
+	parser.add_argument('--fname_dest', type=str, default='.', help='filename of png')
+	return parser.parse_args()
+
+if __name__ == '__main__':
+	opts = parse_args()
+	with open( opts.fname_hist ) as fhandle:
+		history = pickle.load(fhandle)
+		loss_plot( history, opts.fname_dest )
