@@ -163,6 +163,10 @@ class DRGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
+		self.n_critic = 1
+		self.c = 0.01 # for wgan
+		if 'wass' in self.loss_option:
+			self.n_critic = 5
 
 		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
 			self.Nd = 337 # 200
@@ -366,7 +370,7 @@ class DRGAN3D(object):
 		normalizerB = self.data_loader.dataset.muB/self.data_loader.dataset.stddevB # normalization
 		eps = 1e-16
 
-		#self.D.train()
+		self.D.train()
 		start_time = time.time()
 		print('training start from epoch {}!!'.format(self.epoch_start+1))
 		for epoch in range(self.epoch_start, self.epoch):
@@ -405,58 +409,91 @@ class DRGAN3D(object):
 					y_random_pcode_onehot_ = Variable( y_random_pcode_onehot_ )
 
 				# update D network
-				self.D_optimizer.zero_grad()
-
-				D_GAN_real, D_id, D_pcode = self.D(x3D_)
-				D_loss_GANreal = self.BCE_loss(D_GAN_real, self.y_real_)
-				D_loss_real_id = self.CE_loss(D_id, y_id_)
-				D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
-
-				x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
-				D_GAN_fake, _, _ = self.D(x3D_hat)
-				D_loss_GANfake = self.BCE_loss(D_GAN_fake, self.y_fake_)
-
-				num_correct_real = torch.sum(D_GAN_real>0.5)
-				num_correct_fake = torch.sum(D_GAN_fake<0.5)
-				D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
-
-				# DRAGAN Loss (Gradient penalty)
-				if 'GP' in self.loss_option:
-					if self.gpu_mode:
-						alpha = torch.rand(x2D_.size()).cuda()
-						x2D_hat = Variable(alpha*x2D_.data +
-											(1-alpha)*(x2D_.data+0.5*x2D_.data.std()*torch.rand(x2D_.size()).cuda()),
-											requires_grad=True)
-					else:
-						alpha = torch.rand(x2D_.size())
-						x2D_hat = Variable(alpha*x2D_.data +
-											(1-alpha)*(x2D_.data+0.5*x2D_.data.std()*torch.rand(x2D_.size())),
-											requires_grad=True)
-					pred_hat,_,_,_ = self.D(x2D_hat)
-					if self.gpu_mode:
-						gradients = grad(outputs=pred_hat, inputs=x2D_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
-											create_graph=True, retain_graph=True, only_inputs=True)[0]
-					else:
-						gradients = grad(outputs=pred_hat, inputs=x2D_hat, grad_outputs=torch.ones(pred_hat.size()),
-											create_graph=True, retain_graph=True, only_inputs=True)[0]
+				for iD in range(self.n_critic) :
+					self.D_optimizer.zero_grad()
 	
-					gradient_penalty = self.lambda_ * ((gradients.view(gradients.size(0),-1).norm(2,1)-1)**2).mean()
+					D_GAN_real, D_id, D_pcode = self.D(x3D_)
+					if 'wass' in self.loss_option:
+						D_loss_GANreal = -torch.mean(D_GAN_real)
+					else:
+						D_loss_GANreal = self.BCE_loss(D_GAN_real, self.y_real_)
+					D_loss_real_id = self.CE_loss(D_id, y_id_)
+					D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
+	
+					x3D_hat = self.G(x2D_, y_random_pcode_onehot_, z_)
+					D_GAN_fake, _, _ = self.D(x3D_hat)
+					if 'wass' in self.loss_option:
+						D_loss_GANreal = torch.mean(D_GAN_fake)
+					else:
+						D_loss_GANfake = self.BCE_loss(D_GAN_fake, self.y_fake_)
+	
+					num_correct_real = torch.sum(D_GAN_real>0.5)
+					num_correct_fake = torch.sum(D_GAN_fake<0.5)
+					D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
+	
+					if 'GP' in self.loss_option:
+						if 'wass' in self.loss_option:
+							# gradient penalty from WGAN_GP.py
+							if self.gpu_mode:
+								alpha = torch.rand(x_.size()).cuda()
+							else:
+								alpha = torch.rand(x_.size())
+			
+							x_hat = Variable(alpha * x3D_.data + (1 - alpha) * x3D_hat.data, requires_grad=True)
+			
+							pred_hat, _, _ = self.D(x_hat)
+							if self.gpu_mode:
+								gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
+											 create_graph=True, retain_graph=True, only_inputs=True)[0]
+							else:
+								gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
+												 create_graph=True, retain_graph=True, only_inputs=True)[0]
+			
+							gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
 
-					D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake + gradient_penalty
-				else:
-					D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake
 
-				self.train_hist['D_loss'].append(D_loss.data[0])
-				self.train_hist['D_loss_GAN_real'].append(D_loss_GANreal.data[0])
-				self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
-				self.train_hist['D_loss_pcode'].append(D_loss_real_pcode.data[0])
-				self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
-				self.train_hist['D_acc'].append(D_acc)
+						else:
+							# DRAGAN Loss (Gradient penalty)
+							if self.gpu_mode:
+								alpha = torch.rand(x2D_.size()).cuda()
+								x2D_hat = Variable(alpha*x2D_.data +
+													(1-alpha)*(x2D_.data+0.5*x2D_.data.std()*torch.rand(x2D_.size()).cuda()),
+													requires_grad=True)
+							else:
+								alpha = torch.rand(x2D_.size())
+								x2D_hat = Variable(alpha*x2D_.data +
+													(1-alpha)*(x2D_.data+0.5*x2D_.data.std()*torch.rand(x2D_.size())),
+													requires_grad=True)
+							pred_hat,_,_,_ = self.D(x2D_hat)
+							if self.gpu_mode:
+								gradients = grad(outputs=pred_hat, inputs=x2D_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
+													create_graph=True, retain_graph=True, only_inputs=True)[0]
+							else:
+								gradients = grad(outputs=pred_hat, inputs=x2D_hat, grad_outputs=torch.ones(pred_hat.size()),
+													create_graph=True, retain_graph=True, only_inputs=True)[0]
+			
+							gradient_penalty = self.lambda_ * ((gradients.view(gradients.size(0),-1).norm(2,1)-1)**2).mean()
+		
+						D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake + gradient_penalty
+					else:
+						D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake
+	
+					self.train_hist['D_loss'].append(D_loss.data[0])
+					self.train_hist['D_loss_GAN_real'].append(D_loss_GANreal.data[0])
+					self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
+					self.train_hist['D_loss_pcode'].append(D_loss_real_pcode.data[0])
+					self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
+					self.train_hist['D_acc'].append(D_acc)
+	
+					D_loss.backward()
+					if D_acc < 0.8:
+						self.D_optimizer.step()
 
-				D_loss.backward()
-				if D_acc < 0.8:
-					self.D_optimizer.step()
+					if 'wass' in self.loss_option and 'GP' not in self.loss_option:
+						for p in self.D.parameters():
+							p.data.clamp_(-self.c, self.c)
 
+	
 				# update G network
 				self.G_optimizer.zero_grad()
 	
