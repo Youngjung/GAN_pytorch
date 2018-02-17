@@ -96,25 +96,25 @@ class generator(nn.Module):
 class discriminator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, Nid=105, Npcode=48, nInputCh=4):
+	def __init__(self, Nid=105, Npcode=48, nInputCh=4, norm=nn.BatchNorm3d):
 		super(discriminator, self).__init__()
 		self.nInputCh = nInputCh
 
 		self.conv = nn.Sequential(
 			nn.Conv3d(nInputCh, 32, 4, 2, 1, bias=False),
-			nn.BatchNorm3d(32),
+			norm(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
-			nn.BatchNorm3d(64),
+			norm(64),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(64, 128, 4, 2, 1, bias=False),
-			nn.BatchNorm3d(128),
+			norm(128),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(128, 256, 4, 2, 1, bias=False),
-			nn.BatchNorm3d(256),
+			norm(256),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(256, 512, 4, 2, 1, bias=False),
-			nn.BatchNorm3d(512),
+			norm(512),
 			nn.LeakyReLU(0.2)
 		)
 
@@ -163,7 +163,8 @@ class DRGAN3D(object):
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
-		self.n_critic = 1
+		self.n_critic = args.n_critic
+		self.n_gen = args.n_gen
 		self.c = 0.01 # for wgan
 		if 'wass' in self.loss_option:
 			self.n_critic = 5
@@ -477,13 +478,14 @@ class DRGAN3D(object):
 						D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake + gradient_penalty
 					else:
 						D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake
-	
-					self.train_hist['D_loss'].append(D_loss.data[0])
-					self.train_hist['D_loss_GAN_real'].append(D_loss_GANreal.data[0])
-					self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
-					self.train_hist['D_loss_pcode'].append(D_loss_real_pcode.data[0])
-					self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
-					self.train_hist['D_acc'].append(D_acc)
+
+					if iD == 0:	
+						self.train_hist['D_loss'].append(D_loss.data[0])
+						self.train_hist['D_loss_GAN_real'].append(D_loss_GANreal.data[0])
+						self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
+						self.train_hist['D_loss_pcode'].append(D_loss_real_pcode.data[0])
+						self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
+						self.train_hist['D_acc'].append(D_acc)
 	
 					D_loss.backward()
 					if D_acc < 0.8:
@@ -495,63 +497,65 @@ class DRGAN3D(object):
 
 	
 				# update G network
-				self.G_optimizer.zero_grad()
+				for iG in range( self.n_gen ):
+					self.G_optimizer.zero_grad()
+		
+					x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
+					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
+					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
+					G_loss_id = self.CE_loss(D_fake_id, y_id_)
+					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
 	
-				x3D_hat = self.G(x2D_, y_pcode_onehot_, z_)
-				D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
-				G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
-				G_loss_id = self.CE_loss(D_fake_id, y_id_)
-				G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
-
-				G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
-				if 'recon' in self.loss_option:
-					G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
-					G_loss += G_loss_recon
-				elif 'reconL1' in self.loss_option:
-					G_loss_recon = self.L1_loss(x3D_hat, x3D_)
-					G_loss += G_loss_recon
-
-				if 'dist' in self.loss_option:
-					sumA = 0
-					sumB = 0
-					for iA in range(self.batch_size):
-						dist_2D = x2D_[iA]-x2D_ + eps
-						dist_3D = x3D_hat[iA]-x3D_hat + eps
-						normdist_2D = torch.norm(dist_2D.view(self.batch_size,-1),1, dim=1)
-						normdist_3D = torch.norm(dist_3D.view(self.batch_size,-1),1, dim=1)
-						sumA += normdist_2D
-						sumB += normdist_3D
-	
-					sumA /= self.data_loader.dataset.stddevA # normalization
-					sumB /= self.data_loader.dataset.stddevB # normalization
-					sumA /= nPairs # expectation
-					sumB /= nPairs # expectation
-	
-					G_loss_distance = torch.abs( torch.sum( sumA - sumB - normalizerA + normalizerB )) / self.batch_size
-					G_loss += G_loss_distance
-
-
-				self.train_hist['G_loss'].append(G_loss.data[0])
-				self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
-				self.train_hist['G_loss_id'].append(G_loss_id.data[0])
-				self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
-				if 'recon' in self.loss_option or 'reconL1' in self.loss_option:
-					self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
-				if 'dist' in self.loss_option:
-					self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
-	
-				G_loss.backward()
-				self.G_optimizer.step()
-				
-				if 'recon' in self.loss_option and 'dist' in self.loss_option:
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon + G_loss_distance
-				elif 'recon' in self.loss_option :
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
-				elif 'dist' in self.loss_option:
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_distance
-				else:
 					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
+					if 'recon' in self.loss_option:
+						G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+						G_loss += G_loss_recon
+					elif 'reconL1' in self.loss_option:
+						G_loss_recon = self.L1_loss(x3D_hat, x3D_)
+						G_loss += G_loss_recon
+	
+					if 'dist' in self.loss_option:
+						sumA = 0
+						sumB = 0
+						for iA in range(self.batch_size):
+							dist_2D = x2D_[iA]-x2D_ + eps
+							dist_3D = x3D_hat[iA]-x3D_hat + eps
+							normdist_2D = torch.norm(dist_2D.view(self.batch_size,-1),1, dim=1)
+							normdist_3D = torch.norm(dist_3D.view(self.batch_size,-1),1, dim=1)
+							sumA += normdist_2D
+							sumB += normdist_3D
+		
+						sumA /= self.data_loader.dataset.stddevA # normalization
+						sumB /= self.data_loader.dataset.stddevB # normalization
+						sumA /= nPairs # expectation
+						sumB /= nPairs # expectation
+		
+						G_loss_distance = torch.abs( torch.sum( sumA - sumB - normalizerA + normalizerB )) / self.batch_size
+						G_loss += G_loss_distance
+	
+	
+					if iG == 0:
+						self.train_hist['G_loss'].append(G_loss.data[0])
+						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
+						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
+						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
+						if 'recon' in self.loss_option or 'reconL1' in self.loss_option:
+							self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
+						if 'dist' in self.loss_option:
+							self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
+		
+					G_loss.backward()
+					self.G_optimizer.step()
 					
+					if 'recon' in self.loss_option and 'dist' in self.loss_option:
+						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon + G_loss_distance
+					elif 'recon' in self.loss_option :
+						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
+					elif 'dist' in self.loss_option:
+						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_distance
+					else:
+						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
+						
 
 	
 				if ((iB + 1) % 10) == 0:

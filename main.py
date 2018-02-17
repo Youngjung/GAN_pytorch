@@ -66,6 +66,8 @@ def parse_args():
 	parser.add_argument('--generate', type=str2bool, default=False, help='generate samples from saved model')
 	parser.add_argument('--centerBosphorus', type=str2bool, default=True, help='center Bosphorus PCL in voxel space')
 	parser.add_argument('--loss_option', type=str, default='', help='recon,dist,GP')
+	parser.add_argument('--n_critic', type=int, default=1, help='n_critic')
+	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
 
 	return check_args(parser.parse_args())
 
