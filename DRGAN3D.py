@@ -169,19 +169,6 @@ class DRGAN3D(object):
 		if 'wass' in self.loss_option:
 			self.n_critic = 5
 
-		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
-			self.Nd = 337 # 200
-			self.Np = 9
-			self.Ni = 20
-			self.Nz = 50
-		elif self.dataset == 'Bosphorus':
-			self.Nz = 50
-		elif self.dataset == 'CASIA-WebFace':
-			self.Nd = 10885 
-			self.Np = 13
-			self.Ni = 20
-			self.Nz = 50
-
 		# makedirs
 		temp_save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 		if not os.path.exists(temp_save_dir):
@@ -221,10 +208,18 @@ class DRGAN3D(object):
 					transform=transforms.Compose(
 					[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()])),
 				batch_size=self.batch_size, shuffle=True) 
+			self.Nd = 337 # 200
+			self.Np = 9
+			self.Ni = 20
+			self.Nz = 50
 		elif self.dataset == 'CASIA-WebFace':
 			self.data_loader = utils.CustomDataLoader(data_dir, transform=transforms.Compose(
 				[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()]), batch_size=self.batch_size,
 												 shuffle=True)
+			self.Nd = 10885 
+			self.Np = 13
+			self.Ni = 20
+			self.Nz = 50
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
 											transform=transforms.ToTensor(),
@@ -232,6 +227,7 @@ class DRGAN3D(object):
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
+			self.Nz = 50
 
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
