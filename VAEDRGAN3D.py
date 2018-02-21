@@ -327,12 +327,16 @@ class VAEDRGAN3D(object):
 
 		# networks init
 		self.G = generator(self.Nfx, self.Nid, self.Npcode, self.Nz)
+		self.Genc = Encoder(self.Nfx, self.Nid, self.Npcode)
+		self.Gdec = Decoder(self.Nfx, self.Npcode, self.Nz)
 		self.D = discriminator(self.Nid, self.Npcode)
-		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
+		self.Genc_optimizer = optim.Adam(self.Genc.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
+		self.Gdec_optimizer = optim.Adam(self.Gdec.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
 		if self.gpu_mode:
-			self.G.cuda()
+			self.Genc.cuda()
+			self.Gdec.cuda()
 			self.D.cuda()
 			self.CE_loss = nn.CrossEntropyLoss().cuda()
 			self.BCE_loss = nn.BCELoss().cuda()
@@ -357,13 +361,13 @@ class VAEDRGAN3D(object):
                            'D_loss_pcode',
                            'D_loss_GAN_fake',
                            'D_acc',
-                           'G_loss',
-                           'G_loss',
-                           'G_loss_GAN_fake',
-                           'G_loss_id',
-                           'G_loss_pcode',
-                           'G_loss_recon',
-                           'G_loss_dist',
+                           'Genc_loss',
+                           'Gdec_loss',
+                           'Gdec_loss_GAN_fake',
+                           'Gdec_loss_id',
+                           'Gdec_loss_pcode',
+                           'Gdec_loss_recon',
+                           'Gdec_loss_dist',
                            'per_epoch_time',
                            'total_time']
 
@@ -524,18 +528,48 @@ class VAEDRGAN3D(object):
 						for p in self.D.parameters():
 							p.data.clamp_(-self.c, self.c)
 
-	
-				# update G network
+				# update Genc network
+				self.Genc_optimizer.zero_grad()
+
+				reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.Nfx), torch.ones(self.batch_size,self.Nfx) )
+				if self.gpu_mode:
+				    reparamZ_ = Variable(reparamZ_.cuda())
+				else:
+				    reparamZ_ = Variable(reparamZ_)
+
+				mu, sigma = self.Genc(x2D_)
+
+				fx = mu + VAEz_*sigma # reparam trick
+
+				x_3D_hat = self.Gdec(fx, y_pcode_onehot_, z_)
+				D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
+
+				Genc_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
+				Genc_loss_id = self.CE_loss(D_fake_id, y_id_)
+				Genc_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
+				KL_loss = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1) / self.batch_size
+
+				Genc_loss = KL_loss + Genc_loss_GANfake + Genc_loss_id + Genc
+
+				Genc_loss.backward()
+				self.train_hist['Genc_loss'].append(Genc_loss.data[0])
+				self.Genc_optimizer.step()
+
+				# update Gdec network
 				for iG in range( self.n_gen ):
-					self.G_optimizer.zero_grad()
+					self.Gdec_optimizer.zero_grad()
 		
 					reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.Nfx), torch.ones(self.batch_size,self.Nfx) )
 					if self.gpu_mode:
 					    reparamZ_ = Variable(reparamZ_.cuda())
 					else:
 					    reparamZ_ = Variable(reparamZ_)
-					x3D_hat, mu, sigma = self.G(x2D_, y_pcode_onehot_, z_, reparamZ_)
+					mu, sigma = self.Genc(x2D_)
+
+					x_3D_hat = self.Gdec(fx, y_pcode_onehot_, z_)
+
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
+
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
 					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
@@ -568,7 +602,6 @@ class VAEDRGAN3D(object):
 						G_loss_distance = torch.abs( torch.sum( sumA - sumB - normalizerA + normalizerB )) / self.batch_size
 						G_loss += G_loss_distance
 	
-					KL_loss = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1) / self.batch_size
 	
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
@@ -580,8 +613,7 @@ class VAEDRGAN3D(object):
 						if 'dist' in self.loss_option:
 							self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
 		
-					G_loss.backward(retain_graph=True)
-					KL_loss.backward()
+					G_loss.backward()
 					self.G_optimizer.step()
 					
 					if 'recon' in self.loss_option and 'dist' in self.loss_option:
