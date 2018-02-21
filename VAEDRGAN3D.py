@@ -640,9 +640,9 @@ class VAEDRGAN3D(object):
 					hours = secs//3600
 					mins = secs/60%60
 					#print("%2dh%2dm E:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f+%.4f,\n\t\t\t G: %.4f=%.4f+%.4f+%.4f" %
-					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f,G: %.4f, D_acc:%.4f" %
+					print("%2dh%2dm E[%2d] B[%d/%d] D:%.4f, Genc:%.4f,  Gdec:%.4f, D_acc:%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  D_loss.data[0], G_loss.data[0], D_acc) )
+						  D_loss.data[0], Genc_loss.data[0], G_loss.data[0], D_acc) )
 #						  D_loss.data[0], D_loss_GANreal.data[0], D_loss_real_id.data[0],
 #						  D_loss_real_pcode.data[0], D_loss_GANfake.data[0],
 #						  G_loss.data[0], G_loss_GANfake.data[0], G_loss_id.data[0],
