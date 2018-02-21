@@ -612,17 +612,17 @@ class VAEDRGAN3D(object):
 	
 	
 					if iG == 0:
-						self.train_hist['G_loss'].append(G_loss.data[0])
-						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
-						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
-						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
+						self.train_hist['Gdec_loss'].append(G_loss.data[0])
+						self.train_hist['Gdec_loss_GAN_fake'].append(G_loss_GANfake.data[0])
+						self.train_hist['Gdec_loss_id'].append(G_loss_id.data[0])
+						self.train_hist['Gdec_loss_pcode'].append(G_loss_pcode.data[0])
 						if 'recon' in self.loss_option or 'reconL1' in self.loss_option:
-							self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
+							self.train_hist['Gdec_loss_recon'].append(G_loss_recon.data[0])
 						if 'dist' in self.loss_option:
-							self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
+							self.train_hist['Gdec_loss_dist'].append(G_loss_distance.data[0])
 		
 					G_loss.backward()
-					self.G_optimizer.step()
+					self.Gdec_optimizer.step()
 					
 					if 'recon' in self.loss_option and 'dist' in self.loss_option:
 						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon + G_loss_distance
