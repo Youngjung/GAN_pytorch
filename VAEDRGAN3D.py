@@ -326,7 +326,6 @@ class VAEDRGAN3D(object):
 			self.reparamZ_ = Variable(reparamZ_)
 
 		# networks init
-		self.G = generator(self.Nfx, self.Nid, self.Npcode, self.Nz)
 		self.Genc = Encoder(self.Nfx, self.Nid, self.Npcode)
 		self.Gdec = Decoder(self.Nfx, self.Npcode, self.Nz)
 		self.D = discriminator(self.Nid, self.Npcode)
@@ -402,7 +401,8 @@ class VAEDRGAN3D(object):
 		start_time = time.time()
 		print('training start from epoch {}!!'.format(self.epoch_start+1))
 		for epoch in range(self.epoch_start, self.epoch):
-			self.G.train()
+			self.Genc.train()
+			self.Gdec.train()
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
 
@@ -454,7 +454,12 @@ class VAEDRGAN3D(object):
 					else:
 					    reparamZ_ = Variable(reparamZ_)
 
-					x3D_hat, _, _ = self.G(x2D_, y_random_pcode_onehot_, z_, reparamZ_)
+					mu, sigma = self.Genc(x2D_)
+	
+					fx = mu + reparamZ_*sigma # reparam trick
+	
+					x3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
+	
 					D_GAN_fake, _, _ = self.D(x3D_hat)
 					if 'wass' in self.loss_option:
 						D_loss_GANfake = torch.mean(D_GAN_fake)
@@ -539,17 +544,17 @@ class VAEDRGAN3D(object):
 
 				mu, sigma = self.Genc(x2D_)
 
-				fx = mu + VAEz_*sigma # reparam trick
+				fx = mu + reparamZ_*sigma # reparam trick
 
-				x_3D_hat = self.Gdec(fx, y_pcode_onehot_, z_)
+				x_3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
 				D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 
 				Genc_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 				Genc_loss_id = self.CE_loss(D_fake_id, y_id_)
-				Genc_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
+				Genc_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
 				KL_loss = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1) / self.batch_size
 
-				Genc_loss = KL_loss + Genc_loss_GANfake + Genc_loss_id + Genc
+				Genc_loss = KL_loss + Genc_loss_GANfake + Genc_loss_id + Genc_loss_pcode
 
 				Genc_loss.backward()
 				self.train_hist['Genc_loss'].append(Genc_loss.data[0])
@@ -566,13 +571,15 @@ class VAEDRGAN3D(object):
 					    reparamZ_ = Variable(reparamZ_)
 					mu, sigma = self.Genc(x2D_)
 
-					x_3D_hat = self.Gdec(fx, y_pcode_onehot_, z_)
+					fx = mu + reparamZ_*sigma # reparam trick
+
+					x_3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
 
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
-					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
+					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
 	
 					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
 
@@ -659,14 +666,20 @@ class VAEDRGAN3D(object):
 
 
 	def visualize_results(self, epoch, fix=True):
-		self.G.eval()
+		self.Genc.eval()
+		self.Gdec.eval()
 
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
 			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
 
 		if fix:
 			""" fixed noise """
-			samples, _, _= self.G(self.sample_x2D_, self.sample_pcode_, self.sample_z_, self.reparamZ_)
+			mu, sigma = self.Genc(self.sample_x2D_)
+
+			fx = mu + self.reparamZ_*sigma # reparam trick
+
+			x3D_hat = self.Gdec(fx, iself.sample_pcode_, self.sample_z_)
+	
 		else:
 			""" random noise """
 			if self.gpu_mode:
