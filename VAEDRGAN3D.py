@@ -546,7 +546,7 @@ class VAEDRGAN3D(object):
 
 				fx = mu + reparamZ_*sigma # reparam trick
 
-				x_3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
+				x3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
 				D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 
 				Genc_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
@@ -557,6 +557,7 @@ class VAEDRGAN3D(object):
 				Genc_loss = KL_loss + Genc_loss_GANfake + Genc_loss_id + Genc_loss_pcode
 
 				Genc_loss.backward()
+
 				self.train_hist['Genc_loss'].append(Genc_loss.data[0])
 				self.Genc_optimizer.step()
 
@@ -573,7 +574,7 @@ class VAEDRGAN3D(object):
 
 					fx = mu + reparamZ_*sigma # reparam trick
 
-					x_3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
+					x3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
 
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 
