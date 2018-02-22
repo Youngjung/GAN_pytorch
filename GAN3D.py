@@ -12,24 +12,14 @@ import pdb
 class generator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : FC1024_BR-FC7x7x128_BR-(64)4dc2s_BR-(1)4dc2s_S
-	def __init__(self, dataset = 'mnist'):
+	def __init__(self, Nz=200, nOutputCh=4):
 		super(generator, self).__init__()
-		if dataset == 'ShapeNet':
-			self.input_height = 64 
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 200
-			self.output_dim = 1
-		elif dataset == 'Bosphorus':
-			self.input_height = 64
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 200
-			self.output_dim = 1
 
+		self.Nz = Nz
+		self.nOutputCh = nOutputCh
 
 		self.deconv = nn.Sequential(
-			nn.ConvTranspose3d(200, 512, 4, bias=False),
+			nn.ConvTranspose3d(Nz, 512, 4, bias=False),
 			nn.BatchNorm3d(512),
 			nn.ReLU(),
 			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
@@ -44,13 +34,13 @@ class generator(nn.Module):
 			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.ReLU(),
-			nn.ConvTranspose3d(32, 4, 4, 2, 1, bias=False),
+			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
 
 	def forward(self, x):
-		x = x.view(-1, self.input_dim, 1,1,1 )
+		x = x.view(-1, self.Nz, 1,1,1 )
 		x = self.deconv(x)
 
 		return x
@@ -59,23 +49,11 @@ class generator(nn.Module):
 class discriminator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, dataset = 'mnist', nInputCh=4):
+	def __init__(self, nOutputCh=4):
 		super(discriminator, self).__init__()
-		if dataset == 'ShapeNet':
-			self.input_height = 64 
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 1
-			self.output_dim = 1
-		elif dataset == 'Bosphorus':
-			self.input_height = 64
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 200
-			self.output_dim = 1
 
 		self.conv = nn.Sequential(
-			nn.Conv3d(nInputCh, 32, 4, 2, 1, bias=False),
+			nn.Conv3d(nOutputCh, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
@@ -114,19 +92,51 @@ class GAN3D(object):
 		self.dataroot_dir = args.dataroot_dir
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
-		self.use_GP = args.use_GP
 		self.model_name = args.gan_type
 		self.num_workers = args.num_workers
-		if self.use_GP:
-			self.model_name = self.model_name + '_GP'
+		self.centerBosphorus = args.centerBosphorus
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
 		self.D_threshold = 0.8
 
+		# load dataset
+		data_dir = os.path.join( self.dataroot_dir, self.dataset )
+		if self.dataset == 'ShapeNet':
+			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
+											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+		elif self.dataset == 'Bosphorus':
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
+											transform=transforms.ToTensor(),
+											shape=128, image_shape=256),
+											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+			self.Nz = 200
+		else:
+			exit("unknown dataset: " + self.dataset)
+
+		# fixed noise
+		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
+		if not os.path.exists ( path_sample ) :
+			print( 'Generating fixed sample for visualization...' )
+			os.makedirs( path.sample )
+			fixed_sample_z_ = torch.normal(torch.zeros(self.test_sample_size, self.Nz),
+									 torch.ones(self.test_sample_size,self.Nz)*0.33)
+			fname = os.path.join( path_sample, 'sample_z.npy' )
+			fixed_sample_z_.numpy().dump( fname )
+		else:
+			print( 'Loading fixed sample for visualization...' )
+			fname = os.path.join( path_sample, 'sample_z.npy' )
+			with open( fname ) as fhandle:
+				fixed_sample_z_ = torch.Tensor( pickle.load(fhandle) )
+
+		if self.gpu_mode:
+			self.sample_z_ = Variable( fixed_sample_z_.cuda(), volatile=True)
+		else:
+			self.sample_z_ = Variable( fixed_sample_z_, volatile=True)
+
 		# networks init
-		self.G = generator(self.dataset)
-		self.D = discriminator(self.dataset)
+		self.G = generator()
+		self.D = discriminator()
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
@@ -144,30 +154,6 @@ class GAN3D(object):
 #		utils.print_network(self.D)
 #		print('-----------------------------------------------')
 
-		# load dataset
-		data_dir = os.path.join( self.dataroot_dir, self.dataset )
-		if self.dataset == 'ShapeNet':
-			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
-											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-		elif self.dataset == 'Bosphorus':
-			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
-											transform=transforms.ToTensor(),
-											shape=128, image_shape=256),
-											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-		else:
-			exit("unknown dataset: " + self.dataset)
-
-		self.z_dim = 200
-
-		# fixed noise
-		if self.gpu_mode:
-#			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
-			self.sample_z_ = Variable( 
-						torch.normal(torch.zeros(self.test_sample_size, self.z_dim),
-									 torch.ones(self.test_sample_size,self.z_dim)*0.33).cuda(),
-						volatile=True)
-		else:
-			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
 
 
 	def train(self):
@@ -201,8 +187,7 @@ class GAN3D(object):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
-#				z_ = torch.rand((self.batch_size, self.z_dim))
-				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim)*0.33)
+				z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz)*0.33)
 				
 				if self.gpu_mode:
 					x_, z_ = Variable(x_.cuda()), Variable(z_.cuda())
@@ -260,16 +245,7 @@ class GAN3D(object):
 				G_ = self.G(z_)
 				D_fake = self.D(G_)
 
-				G_projected = torch.div( 
-										torch.sum( torch.mul(G_[:,0:1,:,:,:], G_[:,1:4,:,:,:]), 4 ),
-										torch.sum(G_[:,0:1,:,:,:],4)+eps
-										)
-				x_projected = torch.div(
-										torch.sum( torch.mul(x_[:,0:1,:,:,:], x_[:,1:4,:,:,:]), 4 ),
-										torch.sum(x_[:,0:1,:,:,:],4)+eps
-										)
-
-				G_loss = self.BCE_loss(D_fake, self.y_real_) + self.L1_loss(G_projected, x_projected)
+				G_loss = self.BCE_loss(D_fake, self.y_real_)
 				self.train_hist['G_loss'].append(G_loss.data[0])
 
 				G_loss.backward()
@@ -282,13 +258,14 @@ class GAN3D(object):
 					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, G_loss: %.4f, D_acc:%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size,
 						  D_loss.data[0], G_loss.data[0], D_acc))
-					utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
+					utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name,
+									use_subplot=True)
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
-			print("dumping x_hat from epoch {}".format(epoch+1))
-			self.dump_x_hat((epoch+1))
 			self.save()
 			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
+			print("dumping x_hat from epoch {}".format(epoch+1))
+			self.dump_x_hat((epoch+1))
 
 		self.train_hist['total_time'].append(time.time() - start_time)
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -310,9 +287,9 @@ class GAN3D(object):
 		else:
 			""" random noise """
 			if self.gpu_mode:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
+				sample_z_ = Variable(torch.rand((self.batch_size, self.Nz)).cuda(), volatile=True)
 			else:
-				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
+				sample_z_ = Variable(torch.rand((self.batch_size, self.Nz)), volatile=True)
 
 			samples = self.G(sample_z_)
 
@@ -340,9 +317,9 @@ class GAN3D(object):
 #		else:
 #			""" random noise """
 #			if self.gpu_mode:
-#				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)).cuda(), volatile=True)
+#				sample_z_ = Variable(torch.rand((self.batch_size, self.Nz)).cuda(), volatile=True)
 #			else:
-#				sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
+#				sample_z_ = Variable(torch.rand((self.batch_size, self.Nz)), volatile=True)
 #
 #			samples = self.G(sample_z_)
 #
