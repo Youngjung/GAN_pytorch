@@ -667,6 +667,7 @@ class VAEDRGAN3D(object):
 
 
 	def visualize_results(self, epoch, fix=True):
+		print( 'Visualizing from epoch {}'.format( epoch ) )
 		self.Genc.eval()
 		self.Gdec.eval()
 
@@ -679,7 +680,7 @@ class VAEDRGAN3D(object):
 
 			fx = mu + self.reparamZ_*sigma # reparam trick
 
-			x3D_hat = self.Gdec(fx, iself.sample_pcode_, self.sample_z_)
+			samples = self.Gdec(fx, self.sample_pcode_, self.sample_z_)
 	
 		else:
 			""" random noise """
@@ -705,7 +706,8 @@ class VAEDRGAN3D(object):
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 
-		torch.save(self.G.state_dict(), os.path.join(save_dir, self.model_name + '_G.pkl'))
+		torch.save(self.Genc.state_dict(), os.path.join(save_dir, self.model_name + '_Genc.pkl'))
+		torch.save(self.Gdec.state_dict(), os.path.join(save_dir, self.model_name + '_Gdec.pkl'))
 		torch.save(self.D.state_dict(), os.path.join(save_dir, self.model_name + '_D.pkl'))
 
 		with open(os.path.join(save_dir, self.model_name + '_history.pkl'), 'wb') as f:
@@ -714,7 +716,8 @@ class VAEDRGAN3D(object):
 	def load(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 
-		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
+		self.Genc.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_Genc.pkl')))
+		self.Gdec.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_Gdec.pkl')))
 		self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
 
 		try:
