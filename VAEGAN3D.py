@@ -1,4 +1,4 @@
-import utils, torch, time, os, pickle, imageio
+import utils, torch, time, os, pickle, imageio, math
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
@@ -12,19 +12,19 @@ import pdb
 def Gaussian_distribution(vector):
 	# input : Variable (batch_size x 400 x 1 x 1)
 	# output : two Variables (batch_size x 200)
-	mean = vector[:, :200, 0,0]
-	variance = vector[:, 200:, 0,0]
+	zdim = vector.size(1)/2
+	mean = vector[:, :zdim, 0,0]
+	variance = vector[:, zdim:, 0,0]
 	return mean, variance
 
 class Encoder(nn.Module):
-	def __init__(self):
+	def __init__(self, Nz=200, nInputChannels=3):
 		super(Encoder,self).__init__()
-		self.input_height = 500
-		self.input_width = 375
-		self.input_dim = 3
+		self.nInputChannels = nInputChannels
+		self.Nz = Nz
 
 		self.conv = nn.Sequential(
-			nn.Conv2d(self.input_dim, 64, 11, 4, 1,bias=True),
+			nn.Conv2d(self.nInputChannels, 64, 11, 4, 1,bias=True),
 			nn.BatchNorm3d(64),
 			nn.ReLU(),
 			nn.Conv2d(64, 128, 5, 2, 1,bias=True),
@@ -36,7 +36,7 @@ class Encoder(nn.Module):
 			nn.Conv2d(256, 512, 5, 2, 1,bias=True),
 			nn.BatchNorm3d(512),
 			nn.ReLU(),
-			nn.Conv2d(512, 400, 8 , 1, 1, bias=True),
+			nn.Conv2d(512, self.Nz*2, 8 , 1, 1, bias=True),
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
@@ -49,24 +49,13 @@ class Encoder(nn.Module):
 class generator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : FC1024_BR-FC7x7x128_BR-(64)4dc2s_BR-(1)4dc2s_S
-	def __init__(self, dataset = 'mnist'):
+	def __init__(self, Nz=200, nOutputChannels=4 ):
 		super(generator, self).__init__()
-		if dataset == 'ShapeNet':
-			self.input_height = 64 
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 200
-			self.output_dim = 1
-		elif dataset == 'Bosphorus':
-			self.input_height = 64
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 200
-			self.output_dim = 1
-
+		self.Nz = Nz
+		self.nOutputChannels = nOutputChannels
 
 		self.deconv = nn.Sequential(
-			nn.ConvTranspose3d(200, 512, 4, bias=False),
+			nn.ConvTranspose3d(Nz, 512, 4, bias=False),
 			nn.BatchNorm3d(512),
 			nn.ReLU(),
 			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
@@ -81,13 +70,13 @@ class generator(nn.Module):
 			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.ReLU(),
-			nn.ConvTranspose3d(32, 1, 4, 2, 1, bias=False),
+			nn.ConvTranspose3d(32, self.nOutputChannels, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 		utils.initialize_weights(self)
 
 	def forward(self, x):
-		x = x.view(-1, self.input_dim, 1,1,1 )
+		x = x.view(-1, self.Nz, 1,1,1 )
 		x = self.deconv(x)
 
 		return x
@@ -95,23 +84,12 @@ class generator(nn.Module):
 class discriminator(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, dataset = 'mnist'):
+	def __init__(self, nOutputChannels=4):
 		super(discriminator, self).__init__()
-		if dataset == 'ShapeNet':
-			self.input_height = 64 
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 1
-			self.output_dim = 1
-		elif dataset == 'Bosphorus':
-			self.input_height = 64
-			self.input_width = 64
-			self.input_depth = 64
-			self.input_dim = 200
-			self.output_dim = 1
+		self.nOutputChannels = nOutputChannels
 
 		self.conv = nn.Sequential(
-			nn.Conv3d(1, 32, 4, 2, 1, bias=False),
+			nn.Conv3d(self.nOutputChannels, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
@@ -143,6 +121,7 @@ class VAEGAN3D(object):
 		# parameters
 		self.epoch = args.epoch
 		self.batch_size = args.batch_size
+		self.sample_num = 49 
 		self.test_sample_size = min(args.test_sample_size, args.batch_size)
 		self.save_dir = args.save_dir
 		self.result_dir = args.result_dir
@@ -150,11 +129,9 @@ class VAEGAN3D(object):
 		self.dataroot_dir = args.dataroot_dir
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
-		self.use_GP = args.use_GP
 		self.model_name = args.gan_type
 		self.num_workers = args.num_workers
-		if self.use_GP:
-			self.model_name = self.model_name + '_GP'
+		self.centerBosphorus = args.centerBosphorus
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
@@ -163,10 +140,116 @@ class VAEGAN3D(object):
 		self.alpha1 = 5
 		self.alpha2 = 0.0001
 
+		# makedirs
+		temp_save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
+		if not os.path.exists(temp_save_dir):
+			os.makedirs(temp_save_dir)
+		else:
+			print('[warning] path exists: '+temp_save_dir)
+			temp_result_dir = os.path.join(self.result_dir, self.dataset, self.model_name)
+			if not os.path.exists(temp_result_dir):
+				os.makedirs(temp_result_dir)
+			else:
+				print('[warning] path exists: '+temp_result_dir)
+
+		# save args
+		timestamp = time.strftime('%b_%d_%Y_%H;%M')
+		with open(os.path.join(temp_save_dir, self.model_name + '_' + timestamp + '_args.pkl'), 'wb') as fhandle:
+			pickle.dump(args, fhandle)
+							
+
+		# load dataset
+		data_dir = os.path.join( self.dataroot_dir, self.dataset )
+		if self.dataset == 'ShapeNet':
+			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
+											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+		elif self.dataset == 'Bosphorus':
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
+											transform=transforms.ToTensor(),
+											shape=128, image_shape=256, center=self.centerBosphorus),
+											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+			self.Nid = 105
+			self.Npcode = len(self.data_loader.dataset.posecodemap)
+			self.Nz = 50
+			self.nInputChannels = 3
+			self.nOutputChannels = 4
+		elif self.dataset == 'IKEA':
+			self.transform = transforms.Compose([transforms.Scale((256, 256)), transforms.ToTensor()])
+			self.data_loader =DataLoader(utils.IKEA(IKEA_data_dir, transform=self.transform), 
+										 batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+		else:
+			exit("unknown dataset: " + self.dataset)
+
+
+		# fixed samples for reconstruction visualization
+		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
+		if not os.path.exists( path_sample ):
+			print( 'Generating fixed sample for visualization...' )
+			os.makedirs( path_sample )
+			nSamples = self.sample_num-self.Npcode
+			nPcodes = self.Npcode
+			sample_x2D_s = []
+			sample_x3D_s = []
+			for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
+				sample_x2D_s.append( sample_x2D_ )
+				sample_x3D_s.append( sample_x3D_ )
+				if iB > nSamples // self.batch_size:
+					break
+			sample_x2D_s = torch.cat( sample_x2D_s )[:nSamples,:,:,:]
+			sample_x3D_s = torch.cat( sample_x3D_s )[:nSamples,:,:,:]
+			sample_x2D_s = torch.split( sample_x2D_s, 1 )
+			sample_x3D_s = torch.split( sample_x3D_s, 1 )
+			sample_x2D_s += (sample_x2D_s[0],)*nPcodes
+			sample_x3D_s += (sample_x3D_s[0],)*nPcodes
+			self.sample_x2D_ = torch.cat( sample_x2D_s )
+			self.sample_x3D_ = torch.cat( sample_x3D_s )
+			self.sample_pcode_ = torch.zeros( nSamples+nPcodes, self.Npcode )
+			self.sample_pcode_[:nSamples,0]=1
+			for iS in range( nPcodes ):
+				ii = iS%self.Npcode
+				self.sample_pcode_[iS+nSamples,ii] = 1
+			self.sample_z_ = torch.rand( nSamples+nPcodes, self.Nz )
+	
+			nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
+			fname = os.path.join( path_sample, 'sampleGT.png')
+			utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
+	
+			fname = os.path.join( path_sample, 'sampleGT_2D.npy')
+			self.sample_x2D_.numpy().dump( fname )
+			fname = os.path.join( path_sample, 'sampleGT_3D.npy')
+			self.sample_x3D_.numpy().dump( fname )
+			fname = os.path.join( path_sample, 'sampleGT_z.npy')
+			self.sample_z_.numpy().dump( fname )
+			fname = os.path.join( path_sample, 'sampleGT_pcode.npy')
+			self.sample_pcode_.numpy().dump( fname )
+		else:
+			print( 'Loading fixed sample for visualization...' )
+			fname = os.path.join( path_sample, 'sampleGT_2D.npy')
+			with open( fname ) as fhandle:
+				self.sample_x2D_ = torch.Tensor(pickle.load( fhandle ))
+			fname = os.path.join( path_sample, 'sampleGT_3D.npy')
+			with open( fname ) as fhandle:
+				self.sample_x3D_ = torch.Tensor(pickle.load( fhandle ))
+			fname = os.path.join( path_sample, 'sampleGT_z.npy')
+			with open( fname ) as fhandle:
+				self.sample_z_ = torch.Tensor( pickle.load( fhandle ))
+			fname = os.path.join( path_sample, 'sampleGT_pcode.npy')
+			with open( fname ) as fhandle:
+				self.sample_pcode_ = torch.Tensor( pickle.load( fhandle ))
+
+		if self.gpu_mode:
+			self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
+			self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
+			self.sample_pcode_ = Variable(self.sample_pcode_.cuda(), volatile=True)
+		else:
+			self.sample_x2D_ = Variable(self.sample_x2D_, volatile=True)
+			self.sample_z_ = Variable(self.sample_z_, volatile=True)
+			self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
+
 		# networks init
-		self.G = generator(self.dataset)
-		self.D = discriminator(self.dataset)
-		self.Enc = Encoder()
+		self.G = generator( self.Nz, self.nOutputChannels )
+		self.D = discriminator( )
+		self.Enc = Encoder( self.Nz, self.nInputChannels )
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 		self.Enc_optimizer = optim.Adam(self.Enc.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
@@ -188,50 +271,6 @@ class VAEGAN3D(object):
 #		utils.print_network(self.D)
 #		print('-----------------------------------------------')
 
-		# load dataset
-		data_dir = os.path.join( self.dataroot_dir, self.dataset )
-		if self.dataset == 'ShapeNet':
-			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
-											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-		elif self.dataset == 'Bosphorus':
-			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
-											transform=transforms.ToTensor(),
-											shape=(128,128,128)),
-											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-		elif self.dataset == 'IKEA':
-			self.transform = transforms.Compose([transforms.Scale((256, 256)), transforms.ToTensor()])
-			self.data_loader =DataLoader(utils.IKEA(IKEA_data_dir, transform=self.transform), 
-										 batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-		else:
-			exit("unknown dataset: " + self.dataset)
-
-		self.z_dim = 200
-
-		for iB, (sample_x_, _, sample_y_) in enumerate(self.data_loader):
-			self.sample_x_ = sample_x_
-			self.sample_y_ = sample_y_
-			break
-
-		self.sample_x_ = self.sample_x_[:self.test_sample_size,:,:,:,:]
-		self.sample_y_ = self.sample_y_[:self.test_sample_size,:,:,:]
-		for iS in range(self.test_sample_size):
-			fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sample_%03d.png'%(iS))
-			imageio.imwrite(fname, self.sample_y_[iS].numpy().transpose(1,2,0))
-
-		fname = os.path.join( self.result_dir, self.dataset, self.model_name, 'sampleGT.npy')
-		self.sample_x_.numpy().squeeze().dump( fname )
-			
-		if self.gpu_mode:
-			self.sample_x_ = Variable( self.sample_x_.cuda(), volatile=True )
-			self.sample_y_ = Variable( self.sample_y_.cuda(), volatile=True )
-			self.sample_z_ = Variable( 
-						torch.normal(torch.zeros(self.test_sample_size, self.z_dim),
-									 torch.ones(self.test_sample_size,self.z_dim)*0.33).cuda(),
-						volatile=True)
-		else:
-			self.sample_x_ = Variable( self.sample_x_, volatile=True )
-			self.sample_y_ = Variable( self.sample_y_, volatile=True )
-			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
 
 
 	def train(self):
@@ -264,7 +303,7 @@ class VAEGAN3D(object):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
-				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
+				z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
 				if self.gpu_mode:
 					x_ = Variable(x_.cuda())
 					y_ = Variable(y_.cuda())
@@ -287,30 +326,7 @@ class VAEGAN3D(object):
 				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 				num_correct_fake = torch.sum(D_fake<0.5)
 
-				""" DRAGAN Loss (Gradient penalty) """
-				if self.use_GP:
-					# This is borrowed from https://github.com/jfsantos/dragan-pytorch/blob/master/dragan.py
-					if self.gpu_mode:
-						alpha = torch.rand(x_.size()).cuda()
-						x_hat = Variable(alpha* x_.data + (1-alpha)* (x_.data + 0.5 * x_.data.std() * torch.rand(x_.size()).cuda()),
-									 requires_grad=True)
-					else:
-						alpha = torch.rand(x_.size())
-						x_hat = Variable(alpha * x_.data + (1 - alpha) * (x_.data + 0.5 * x_.data.std() * torch.rand(x_.size())),
-							requires_grad=True)
-					pred_hat = self.D(x_hat)
-					if self.gpu_mode:
-						gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
-									 create_graph=True, retain_graph=True, only_inputs=True)[0]
-					else:
-						gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
-										 create_graph=True, retain_graph=True, only_inputs=True)[0]
-	
-					gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
-	
-					D_loss = D_real_loss + D_fake_loss + gradient_penalty
-				else:
-					D_loss = D_real_loss + D_fake_loss
+				D_loss = D_real_loss + D_fake_loss
 				D_loss.backward()
 				self.train_hist['D_loss'].append(D_loss.data[0])
 
@@ -325,7 +341,7 @@ class VAEGAN3D(object):
 
 				temp = self.Enc(y_)
 				mu, sigma= Gaussian_distribution(temp)
-				reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
+				reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
 				if self.gpu_mode:
 					reparamZ_ = Variable(reparamZ_.cuda())
 				else:
@@ -349,7 +365,7 @@ class VAEGAN3D(object):
 
 				temp = self.Enc(y_)
 				mu, sigma= Gaussian_distribution(temp)
-				reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
+				reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
 				if self.gpu_mode:
 					reparamZ_ = Variable(reparamZ_.cuda())
 				else:
@@ -376,10 +392,9 @@ class VAEGAN3D(object):
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			print("dumping x_hat from epoch {}".format(epoch+1))
-			self.dump_x_hat((epoch+1))
-#			self.visualize_results((epoch+1))
 			self.save()
 			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name, y_max=15)
+			self.dump_x_hat((epoch+1))
 
 		self.train_hist['total_time'] = time.time() - start_time + self.train_hist['total_time']
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -387,7 +402,6 @@ class VAEGAN3D(object):
 		print("Training finish!... save training results")
 
 		self.save()
-#		utils.generate_animation(self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name, self.epoch)
 		utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
 
 	def dump_x_hat(self, epoch, fix=True):
@@ -395,9 +409,9 @@ class VAEGAN3D(object):
 
 
 		""" fixed image """
-		temp = self.Enc(self.sample_y_)
+		temp = self.Enc(self.sample_x2D_)
 		mu, sigma= Gaussian_distribution(temp)
-		reparamZ_ = torch.normal( torch.zeros(self.test_sample_size, self.z_dim), torch.ones(self.test_sample_size,self.z_dim) )
+		reparamZ_ = torch.normal( torch.zeros(self.sample_num, self.Nz), torch.ones(self.sample_num,self.Nz) )
 		if self.gpu_mode:
 			reparamZ_ = Variable(reparamZ_.cuda())
 		else:
