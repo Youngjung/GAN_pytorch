@@ -95,6 +95,10 @@ class GAN3D(object):
 		self.model_name = args.gan_type
 		self.num_workers = args.num_workers
 		self.centerBosphorus = args.centerBosphorus
+		self.loss_option = args.loss_option
+		if len(args.loss_option) > 0:
+			self.model_name = self.model_name + '_' + args.loss_option
+			self.loss_option = args.loss_option.split(',')
 		if len(args.comment) > 0:
 			self.model_name = self.model_name + '_' + args.comment
 		self.lambda_ = 0.25
@@ -118,7 +122,7 @@ class GAN3D(object):
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
 		if not os.path.exists ( path_sample ) :
 			print( 'Generating fixed sample for visualization...' )
-			os.makedirs( path.sample )
+			os.makedirs( path_sample )
 			fixed_sample_z_ = torch.normal(torch.zeros(self.test_sample_size, self.Nz),
 									 torch.ones(self.test_sample_size,self.Nz)*0.33)
 			fname = os.path.join( path_sample, 'sample_z.npy' )
@@ -207,7 +211,7 @@ class GAN3D(object):
 				num_correct_fake = torch.sum(D_fake<0.5)
 
 				""" DRAGAN Loss (Gradient penalty) """
-				if self.use_GP:
+				if 'GP' in self.loss_option:
 					# This is borrowed from https://github.com/jfsantos/dragan-pytorch/blob/master/dragan.py
 					if self.gpu_mode:
 						alpha = torch.rand(x_.size()).cuda()
@@ -305,7 +309,7 @@ class GAN3D(object):
 
 
 	def visualize_results(self, epoch, fix=True):
-		self.dump_xhat( epoch, fix=fix )
+		self.dump_x_hat( epoch, fix=fix )
 #		self.G.eval()
 #
 #		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
