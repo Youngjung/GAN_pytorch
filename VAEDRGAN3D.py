@@ -32,26 +32,29 @@ class Encoder( nn.Module ):
 			nn.Conv2d(256, 512, 5, 2, 1,bias=True),
 			nn.BatchNorm2d(512),
 			nn.LeakyReLU(0.2),
-			nn.Conv2d(512, Nfx, 8 , 1, 1, bias=True),
+			nn.Conv2d(512, self.Nfx*2, 8 , 1, 1, bias=True),
+			#nn.Conv2d(512, Nfx, 8 , 1, 1, bias=True),
 			nn.Sigmoid(),
 		)
 
-		self.fc = nn.Linear( Nfx, Nfx*2 )
+#		self.fc = nn.Linear( Nfx, Nfx*2 )
 		self.softplus = nn.Softplus()
 
 		utils.initialize_weights(self)
 
 	def forward(self, input):
 		x = self.conv( input )
-		x = x.view(-1,self.Nfx)
+		x = x.view(-1,self.Nfx*2)
 
-		gaussian_params = self.fc(x)
+#		gaussian_params = self.fc(x)
 
-		mean = gaussian_params[:,:self.Nfx]
+		mean = x[:,:self.Nfx]
+		#mean = gaussian_params[:,:self.Nfx]
 
 		# softplus -> stddev should be always positive
 		# epsilon for numerical stability
-		stddev = self.softplus(gaussian_params[:,self.Nfx:]) + 1e-6
+		#stddev = self.softplus(gaussian_params[:,self.Nfx:]) + 1e-6
+		stddev = self.softplus(x[:,self.Nfx:]) + 1e-6
 		return mean, stddev
 
 class Decoder( nn.Module ):
@@ -441,7 +444,7 @@ class VAEDRGAN3D(object):
 						D_loss_GANreal = -torch.mean(D_GAN_real)
 					else:
 						D_loss_GANreal = self.BCE_loss(D_GAN_real, self.y_real_)
-					D_loss_real_id = self.CE_loss(D_id, y_id_) *10
+					D_loss_real_id = self.CE_loss(D_id, y_id_)
 					D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
 	
 					reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.Nfx), torch.ones(self.batch_size,self.Nfx) )
@@ -577,7 +580,7 @@ class VAEDRGAN3D(object):
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
-					G_loss_id = self.CE_loss(D_fake_id, y_id_)*10
+					G_loss_id = self.CE_loss(D_fake_id, y_id_)
 					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
 	
 					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
@@ -697,6 +700,7 @@ class VAEDRGAN3D(object):
 
 		fname = self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.npy'
 		samples.dump(fname)
+		print( 'Visualizing done' )
 
 
 	def save(self):
