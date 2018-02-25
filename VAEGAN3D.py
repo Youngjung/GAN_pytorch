@@ -462,3 +462,95 @@ class VAEGAN3D(object):
 			print( 'loaded epoch {}'.format(self.epoch_start) )
 		except:
 			print('history is not found and ignored')
+
+
+	def interpolate(self, opts):
+		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
+
+		print( 'loading from {}...'.format(save_dir) )
+		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
+		self.Enc.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_Enc.pkl')))
+		
+		self.G.eval()
+		self.Enc.eval()
+
+		if self.gpu_mode:
+			self.Enc = self.Enc.cuda()
+
+		n_interp = opts.n_interp
+		nz = 50
+		is_enc = opts.is_enc
+		tran = transforms.ToTensor()
+
+		# interpolate between twe noise(z1, z2).
+		f_type = ""	
+		if is_enc:	
+			x2d_ = self.get_image_batch()
+			
+			f_type = "enc"
+
+
+			#get y1_, y2_ images
+			#x1_, x2_ = Variable(x2d_[0].unsqueeze(0).cuda()), Variable(x2d_[1].unsqueeze(0).cuda())
+			x_ = Variable(x2d_.cuda())
+		
+			#dis1 = self.Enc(x1_)
+			#dis2 = self.Enc(x2_)
+			#mu1, sigma1 = Gaussian_distribution(dis1)
+			#mu2, sigma2 = Gaussian_distribution(dis2)
+			dis = self.Enc(x_)
+			mu, sigma = Gaussian_distribution(dis)
+
+			z = torch.FloatTensor(self.batch_size, nz).normal_(0.0, 1.0)
+			z = Variable(z.cuda())
+			
+			z_enc = mu + z*sigma
+			#z1 = mu1 + z*sigma1
+			#z2 = mu2 + z*sigma2
+			#pdb.set_trace()
+			z1 = (z_enc[0].unsqueeze(0))
+			z2 = (z_enc[1].unsqueeze(0))
+			
+			z1 = torch.cat((z1,z1,z1,z1),1)
+			z2 = torch.cat((z2,z2,z2,z2),1)
+			
+		else:
+			z1 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
+			z2 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
+			z1, z2 = Variable(z1), Variable(z2)
+
+		
+		
+		z_interp = torch.FloatTensor(1, nz)
+
+		if self.gpu_mode:
+			z_interp = z_interp.cuda()
+			z1 = z1.cuda()
+			z2 = z2.cuda()
+			self.G = self.G.cuda()
+
+		samples_a = self.G(z1)
+		samples_a = samples_a.cpu().data.numpy().squeeze()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, self.model_name+f_type+'_A.npy')
+		samples_a.dump(fname)
+
+		samples_b = self.G(z2)
+		samples_b = samples_b.cpu().data.numpy().squeeze()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, self.model_name + f_type+'_B.npy')
+		samples_b.dump(fname)
+
+
+#		z_interp = Variable(z_interp, volatile = True)
+		dz = (z2-z1)/n_interp
+
+		#make interpolation 3D
+		for i in range(1, n_interp + 1):
+			z_interp = z1 + i*dz
+			samples = self.G(z_interp)
+			if self.gpu_mode:
+				samples = samples.cpu().data.numpy().squeeze()
+			else:
+				samples = samples.data.numpy().squeeze()
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, self.model_name +f_type +'%03d.npy' % (i))
+			samples.dump(fname)
+

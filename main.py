@@ -69,6 +69,11 @@ def parse_args():
 	parser.add_argument('--n_critic', type=int, default=1, help='n_critic')
 	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
 
+	# below arguments are for interpolation (eval mode)
+	parser.add_argument('--interpolate', type=str2bool, default=False, help='generate samples with interpolation from saved model')
+	parser.add_argument('--is_enc', type=str2bool, default=False, help='make latent variable from input images')
+
+
 	return check_args(parser.parse_args())
 
 """checking arguments"""
@@ -169,18 +174,19 @@ def main():
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
-	if opts.resume or opts.generate:
+	if opts.resume or opts.generate or opts.interpolate:
 		print(" [*] Loading saved model...")
 		gan.load()
 		print(" [*] Loading finished!")
 
 	# launch the graph in a session
-	if not opts.generate:
+	if not opts.generate and not opts.interpolate:
 		gan.train()
 		print(" [*] Training finished!")
 
 	# visualize learned generator
-	gan.visualize_results(opts.epoch)
+	gan.visualize_results( opts.epoch )
+	gan.interpolate( opts )
 	print(" [*] Testing finished!")
 
 if __name__ == '__main__':
