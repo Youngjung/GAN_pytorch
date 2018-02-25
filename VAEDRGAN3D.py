@@ -183,20 +183,6 @@ class VAEDRGAN3D(object):
 		if 'wass' in self.loss_option:
 			self.n_critic = 5
 
-		if self.dataset == 'MultiPie' or self.dataset == 'miniPie':
-			self.Nd = 337 # 200
-			self.Np = 9
-			self.Ni = 20
-			self.Nz = 50
-		elif self.dataset == 'Bosphorus':
-			self.Nz = 50
-			self.Nfx = 320
-		elif self.dataset == 'CASIA-WebFace':
-			self.Nd = 10885 
-			self.Np = 13
-			self.Ni = 20
-			self.Nz = 50
-
 		# makedirs
 		temp_save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 		if not os.path.exists(temp_save_dir):
@@ -236,10 +222,18 @@ class VAEDRGAN3D(object):
 					transform=transforms.Compose(
 					[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()])),
 				batch_size=self.batch_size, shuffle=True) 
+			self.Nd = 337 # 200
+			self.Np = 9
+			self.Ni = 20
+			self.Nz = 50
 		elif self.dataset == 'CASIA-WebFace':
 			self.data_loader = utils.CustomDataLoader(data_dir, transform=transforms.Compose(
 				[transforms.Scale(100), transforms.RandomCrop(96), transforms.ToTensor()]), batch_size=self.batch_size,
 												 shuffle=True)
+			self.Nd = 10885 
+			self.Np = 13
+			self.Ni = 20
+			self.Nz = 50
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
 											transform=transforms.ToTensor(),
@@ -247,6 +241,8 @@ class VAEDRGAN3D(object):
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
+			self.Nz = 50
+			self.Nfx = 320
 
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
@@ -445,7 +441,7 @@ class VAEDRGAN3D(object):
 						D_loss_GANreal = -torch.mean(D_GAN_real)
 					else:
 						D_loss_GANreal = self.BCE_loss(D_GAN_real, self.y_real_)
-					D_loss_real_id = self.CE_loss(D_id, y_id_)
+					D_loss_real_id = self.CE_loss(D_id, y_id_) *10
 					D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
 	
 					reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.Nfx), torch.ones(self.batch_size,self.Nfx) )
@@ -546,15 +542,16 @@ class VAEDRGAN3D(object):
 
 				fx = mu + reparamZ_*sigma # reparam trick
 
-				x3D_hat = self.Gdec(fx, y_random_pcode_onehot_, z_)
+				x3D_hat = self.Gdec(fx, y_pcode_onehot_, z_)
 				D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 
-				Genc_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
-				Genc_loss_id = self.CE_loss(D_fake_id, y_id_)
-				Genc_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
+#				Genc_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
+#				Genc_loss_id = self.CE_loss(D_fake_id, y_id_)
+#				Genc_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
 				KL_loss = 0.5 * torch.sum(mu**2 + sigma**2 - torch.log(1e-8 + sigma**2)-1) / self.batch_size
 
-				Genc_loss = KL_loss + Genc_loss_GANfake + Genc_loss_id + Genc_loss_pcode
+#				Genc_loss = KL_loss + Genc_loss_GANfake + Genc_loss_id + Genc_loss_pcode
+				Genc_loss = KL_loss # + Genc_loss_id 
 
 				Genc_loss.backward()
 
@@ -563,6 +560,7 @@ class VAEDRGAN3D(object):
 
 				# update Gdec network
 				for iG in range( self.n_gen ):
+					self.Genc_optimizer.zero_grad()
 					self.Gdec_optimizer.zero_grad()
 		
 					reparamZ_ = torch.normal( torch.zeros(self.batch_size, self.Nfx), torch.ones(self.batch_size,self.Nfx) )
@@ -579,7 +577,7 @@ class VAEDRGAN3D(object):
 					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
 
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
-					G_loss_id = self.CE_loss(D_fake_id, y_id_)
+					G_loss_id = self.CE_loss(D_fake_id, y_id_)*10
 					G_loss_pcode = self.CE_loss(D_fake_pcode, y_random_pcode_)
 	
 					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
@@ -622,6 +620,7 @@ class VAEDRGAN3D(object):
 							self.train_hist['Gdec_loss_dist'].append(G_loss_distance.data[0])
 		
 					G_loss.backward()
+					self.Genc_optimizer.step()
 					self.Gdec_optimizer.step()
 					
 					if 'recon' in self.loss_option and 'dist' in self.loss_option:
