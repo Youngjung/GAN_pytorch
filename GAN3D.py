@@ -114,7 +114,7 @@ class GAN3D(object):
 											transform=transforms.ToTensor(),
 											shape=128, image_shape=256),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-			self.Nz = 200
+			self.Nz = 50 
 		else:
 			exit("unknown dataset: " + self.dataset)
 
@@ -139,7 +139,7 @@ class GAN3D(object):
 			self.sample_z_ = Variable( fixed_sample_z_, volatile=True)
 
 		# networks init
-		self.G = generator()
+		self.G = generator(Nz=self.Nz)
 		self.D = discriminator()
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
