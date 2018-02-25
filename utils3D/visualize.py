@@ -24,7 +24,7 @@ def plot_voxels(in_path, title, out_path):
 		plot_voxel(voxel.astype(np.bool),
 				   '{}{}.png'.format(out_path, i))
 
-def plot_voxel(voxel, title=None, save_file = None):
+def plot_voxel(voxel, save_file = None):
 	fig = plt.figure()
 	ax = fig.gca(projection='3d')
 	ax.voxels(voxel, edgecolor='k')
@@ -36,15 +36,14 @@ def plot_voxel(voxel, title=None, save_file = None):
 		plt.savefig(save_file)
 		plt.close(fig)
 
-def plot_colored_voxel(voxel, color, title=None, save_file = None):
+def plot_colored_voxel(voxel, color, save_file = None):
 	fig = plt.figure()
 	ax = fig.gca(projection='3d')
 	color = color.transpose(1,2,3,0)
+	#ax.voxels(voxel, edgecolor=color, facecolors = color)
 	ax.voxels(voxel, facecolors = color)
 	ax.set(xlabel='x', ylabel='y', zlabel='z')
 
-	#ax.voxels(voxel, edgecolor=color, facecolors = color)
-	# plt.title(title)
 	if save_file is None:
 		plt.show()
 	else:

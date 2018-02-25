@@ -11,8 +11,8 @@ def parse_opts():
 	desc = "visualize npy voxels of prob to visdom"
 	parser = argparse.ArgumentParser(description=desc)
 
-	parser.add_argument('--dir_npy', type=str, default='./', help='directory that contains npy files')
-	parser.add_argument('--dir_dest', type=str, default='./', help='directory to put result png files')
+	parser.add_argument('--dir_npy', type=str, default='', help='directory that contains npy files')
+	parser.add_argument('--dir_dest', type=str, default='', help='directory to put result png files')
 	parser.add_argument('--batch_size', type=int, default=64, help='The size of batch')
 	parser.add_argument('--epoch_from', type=int, default=0, help='epoch to start plotting from')
 	parser.add_argument('--epoch_to', type=int, default=-1, help='epoch to end plotting')
@@ -31,6 +31,16 @@ def main():
 	opts = parse_opts()
 	if opts is None:
 		exit()
+
+	if len(opts.fname)==0 and len(opts.dir_npy)==0:
+		print( 'Target is not provided' )
+		exit()
+
+	if len(opts.dir_npy) == 0:
+		opts.dir_npy = os.path.dirname( opts.fname )
+
+	if len(opts.dir_dest) == 0:
+		opts.dir_dest = os.path.join( opts.dir_npy, 'ply' )
 
 	if not os.path.exists( opts.dir_dest ):
 		os.makedirs( opts.dir_dest )
