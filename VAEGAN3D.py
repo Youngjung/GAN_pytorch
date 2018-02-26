@@ -222,6 +222,8 @@ class VAEGAN3D(object):
 			self.sample_z_.numpy().dump( fname )
 			fname = os.path.join( path_sample, 'sampleGT_pcode.npy')
 			self.sample_pcode_.numpy().dump( fname )
+		elif args.interpolate or args.generate:
+			print( 'skipping fixed sample for visualization...: interpolate/generate' )
 		else:
 			print( 'Loading fixed sample for visualization...' )
 			fname = os.path.join( path_sample, 'sampleGT_2D.npy')
@@ -237,14 +239,15 @@ class VAEGAN3D(object):
 			with open( fname ) as fhandle:
 				self.sample_pcode_ = torch.Tensor( pickle.load( fhandle ))
 
-		if self.gpu_mode:
-			self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
-			self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
-			self.sample_pcode_ = Variable(self.sample_pcode_.cuda(), volatile=True)
-		else:
-			self.sample_x2D_ = Variable(self.sample_x2D_, volatile=True)
-			self.sample_z_ = Variable(self.sample_z_, volatile=True)
-			self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
+		if not args.interpolate and not args.generate:
+			if self.gpu_mode:
+				self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
+				self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
+				self.sample_pcode_ = Variable(self.sample_pcode_.cuda(), volatile=True)
+			else:
+				self.sample_x2D_ = Variable(self.sample_x2D_, volatile=True)
+				self.sample_z_ = Variable(self.sample_z_, volatile=True)
+				self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
 
 		# networks init
 		self.G = generator( self.Nz, self.nOutputChannels )
@@ -429,8 +432,61 @@ class VAEGAN3D(object):
 		samples.dump(fname)
 
 
-	def visualize_results(self, epoch):
-		self.dump_x_hat(epoch)
+	def visualize_results(self, epoch, fix=True):
+		print( 'visualizing result...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+
+		self.G.eval()
+		self.Enc.eval()
+
+#		if fix:
+#			""" fixed noise """
+#			samples = self.G(self.sample_z_)
+#		else:
+#			""" random noise """
+#			sample_z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
+#			if self.gpu_mode:
+#				sample_z_ = Variable(sample_z_.cuda(), volatile=True)
+#			else:
+#				sample_z_ = Variable(sample_z_, volatile=True)
+#
+#			samples = self.G(sample_z_)
+#
+#		if self.gpu_mode:
+#			samples = samples.cpu().data.numpy().squeeze()
+#		else:
+#			samples = samples.data.numpy().squeeze()
+#
+#		for i in range( self.batch_size ):
+#			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+#										self.model_name+'_e%03d_random_sample%03d.npy'%(epoch,i))
+#			np.expand_dims(samples[i],0).dump( filename )
+
+		# reconstruction (inference 2D-to-3D )
+		x2d_ = self.get_image_batch()
+
+		x_ = Variable(x2d_.cuda(), volatile=True)
+	
+		dis = self.Enc(x_)
+		mu, sigma = Gaussian_distribution(dis)
+
+		z = torch.FloatTensor(self.batch_size, self.Nz).normal_(0.0, 1.0)
+		z = Variable(z.cuda())
+		
+		z_enc = mu + z*sigma
+
+		samples = self.G(z_enc)
+		samples = samples.cpu().data.numpy()
+		print( 'saving...')
+		for i in range( self.batch_size ):
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate', self.model_name + '_%03d.png'%i)
+			imageio.imwrite(fname, x2d_[i].numpy().transpose(1,2,0))
+			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+										self.model_name+'_e%03d_sample%03d.npy'%(epoch,i))
+			np.expand_dims(samples[i],0).dump( filename )
+
 
 	def save(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
@@ -463,13 +519,14 @@ class VAEGAN3D(object):
 		except:
 			print('history is not found and ignored')
 
+	def get_image_batch(self):
+		dataIter = iter(self.data_loader)
+		return next(dataIter)[2]
 
 	def interpolate(self, opts):
-		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
-
-		print( 'loading from {}...'.format(save_dir) )
-		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
-		self.Enc.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_Enc.pkl')))
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
 		
 		self.G.eval()
 		self.Enc.eval()
@@ -486,38 +543,30 @@ class VAEGAN3D(object):
 		f_type = ""	
 		if is_enc:	
 			x2d_ = self.get_image_batch()
+
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_A.png')
+			imageio.imwrite(fname, x2d_[0].numpy().transpose(1,2,0))
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.png')
+			imageio.imwrite(fname, x2d_[1].numpy().transpose(1,2,0))
 			
 			f_type = "enc"
 
-
-			#get y1_, y2_ images
-			#x1_, x2_ = Variable(x2d_[0].unsqueeze(0).cuda()), Variable(x2d_[1].unsqueeze(0).cuda())
-			x_ = Variable(x2d_.cuda())
+			x_ = Variable(x2d_.cuda(), volatile=True)
 		
-			#dis1 = self.Enc(x1_)
-			#dis2 = self.Enc(x2_)
-			#mu1, sigma1 = Gaussian_distribution(dis1)
-			#mu2, sigma2 = Gaussian_distribution(dis2)
 			dis = self.Enc(x_)
 			mu, sigma = Gaussian_distribution(dis)
 
 			z = torch.FloatTensor(self.batch_size, nz).normal_(0.0, 1.0)
-			z = Variable(z.cuda())
+			z = Variable(z.cuda(), volatile=True)
 			
 			z_enc = mu + z*sigma
-			#z1 = mu1 + z*sigma1
-			#z2 = mu2 + z*sigma2
-			#pdb.set_trace()
 			z1 = (z_enc[0].unsqueeze(0))
 			z2 = (z_enc[1].unsqueeze(0))
-			
-			z1 = torch.cat((z1,z1,z1,z1),1)
-			z2 = torch.cat((z2,z2,z2,z2),1)
 			
 		else:
 			z1 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
 			z2 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
-			z1, z2 = Variable(z1), Variable(z2)
+			z1, z2 = Variable(z1, volatile=True), Variable(z2, volatile=True)
 
 		
 		
@@ -530,17 +579,16 @@ class VAEGAN3D(object):
 			self.G = self.G.cuda()
 
 		samples_a = self.G(z1)
-		samples_a = samples_a.cpu().data.numpy().squeeze()
-		fname = os.path.join(self.result_dir, self.dataset, self.model_name, self.model_name+f_type+'_A.npy')
+		samples_a = samples_a.cpu().data.numpy()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name+f_type+'_A.npy')
 		samples_a.dump(fname)
 
 		samples_b = self.G(z2)
-		samples_b = samples_b.cpu().data.numpy().squeeze()
-		fname = os.path.join(self.result_dir, self.dataset, self.model_name, self.model_name + f_type+'_B.npy')
+		samples_b = samples_b.cpu().data.numpy()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.npy')
 		samples_b.dump(fname)
 
 
-#		z_interp = Variable(z_interp, volatile = True)
 		dz = (z2-z1)/n_interp
 
 		#make interpolation 3D
@@ -548,9 +596,9 @@ class VAEGAN3D(object):
 			z_interp = z1 + i*dz
 			samples = self.G(z_interp)
 			if self.gpu_mode:
-				samples = samples.cpu().data.numpy().squeeze()
+				samples = samples.cpu().data.numpy()
 			else:
-				samples = samples.data.numpy().squeeze()
-			fname = os.path.join(self.result_dir, self.dataset, self.model_name, self.model_name +f_type +'%03d.npy' % (i))
+				samples = samples.data.numpy()
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +f_type +'%03d.npy' % (i))
 			samples.dump(fname)
 

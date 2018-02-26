@@ -41,7 +41,7 @@ def parse_args():
 									'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
 									'AE3D'],
 						help='The type of GAN')#, required=True)
-	parser.add_argument('--dataset', type=str, default='mnist', 
+	parser.add_argument('--dataset', type=str, default='Bosphorus', 
 						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus'],
 						help='The name of dataset')
 	parser.add_argument('--synsetId', type=str, default='chair', help='synsetId of ShapeNet')
@@ -63,7 +63,6 @@ def parse_args():
 	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
 	parser.add_argument('--resume', type=str2bool, default=False, help='resume training from saved model')
-	parser.add_argument('--generate', type=str2bool, default=False, help='generate samples from saved model')
 	parser.add_argument('--centerBosphorus', type=str2bool, default=True, help='center Bosphorus PCL in voxel space')
 	parser.add_argument('--loss_option', type=str, default='', help='recon,dist,GP')
 	parser.add_argument('--n_critic', type=int, default=1, help='n_critic')
@@ -72,7 +71,11 @@ def parse_args():
 	# below arguments are for interpolation (eval mode)
 	parser.add_argument('--interpolate', type=str2bool, default=False, help='generate samples with interpolation from saved model')
 	parser.add_argument('--is_enc', type=str2bool, default=False, help='make latent variable from input images')
+	parser.add_argument('--n_interp', type=int, default=20, help='number of interpolation points')
 
+	# below arguments are for generation (eval mode)
+	parser.add_argument('--generate', type=str2bool, default=False, help='generate samples from saved model')
+	parser.add_argument('--fix_z', type=str2bool, default=False, help='fix z')
 
 	return check_args(parser.parse_args())
 
@@ -185,8 +188,10 @@ def main():
 		print(" [*] Training finished!")
 
 	# visualize learned generator
-	gan.visualize_results( opts.epoch )
-	gan.interpolate( opts )
+	if opts.generate:
+		gan.visualize_results( opts.epoch, opts.fix_z )
+	if opts.interpolate:
+		gan.interpolate( opts )
 	print(" [*] Testing finished!")
 
 if __name__ == '__main__':

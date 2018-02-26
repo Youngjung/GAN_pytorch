@@ -231,7 +231,9 @@ class DRGAN3D(object):
 
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
-		if not os.path.exists( path_sample ):
+		if args.interpolate or args.generate:
+			print( 'skipping fixed sample : interpolate/generate' )
+		elif not os.path.exists( path_sample ):
 			print( 'Generating fixed sample for visualization...' )
 			os.makedirs( path_sample )
 			nSamples = self.sample_num-self.Npcode
@@ -289,14 +291,15 @@ class DRGAN3D(object):
 			with open( fname ) as fhandle:
 				self.sample_pcode_ = torch.Tensor( pickle.load( fhandle ))
 
-		if self.gpu_mode:
-			self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
-			self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
-			self.sample_pcode_ = Variable(self.sample_pcode_.cuda(), volatile=True)
-		else:
-			self.sample_x2D_ = Variable(self.sample_x2D_, volatile=True)
-			self.sample_z_ = Variable(self.sample_z_, volatile=True)
-			self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
+		if not args.interpolate and not args.generate:
+			if self.gpu_mode:
+				self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
+				self.sample_z_ = Variable(self.sample_z_.cuda(), volatile=True)
+				self.sample_pcode_ = Variable(self.sample_pcode_.cuda(), volatile=True)
+			else:
+				self.sample_x2D_ = Variable(self.sample_x2D_, volatile=True)
+				self.sample_z_ = Variable(self.sample_z_, volatile=True)
+				self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
 
 		# networks init
 		self.G = generator(self.Nid, self.Npcode, self.Nz)
@@ -572,7 +575,7 @@ class DRGAN3D(object):
 			utils.loss_plot(self.train_hist,
 							os.path.join(self.save_dir, self.dataset, self.model_name),
 							self.model_name, use_subplot=True)
-			self.visualize_results((epoch+1))
+			self.dump_x_hat((epoch+1))
 
 		self.train_hist['total_time'].append(time.time() - start_time)
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -585,7 +588,8 @@ class DRGAN3D(object):
 						self.model_name, use_subplot=True)
 
 
-	def visualize_results(self, epoch, fix=True):
+	def dump_x_hat(self, epoch, fix=True):
+		print( 'dump x_hat...' )
 		self.G.eval()
 
 		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
@@ -610,6 +614,72 @@ class DRGAN3D(object):
 
 		fname = self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.npy'
 		samples.dump(fname)
+
+	def get_image_batch(self):
+		dataIter = iter(self.data_loader)
+		return next(dataIter)
+
+	def visualize_results(self,a=None,b=None):
+		print( 'visualizing result...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+
+		self.G.eval()
+
+		# reconstruction (inference 2D-to-3D )
+		_, y_, x2D = self.get_image_batch()
+		y_ = y_['pcode']
+		y_onehot_ = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot_.scatter_(1, y_.view(-1,1), 1)
+	
+		""" random noise """
+		z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
+
+		x2D_, z_ = Variable(x2D.cuda(),volatile=True), Variable(z_.cuda(),volatile=True)
+#		y_ = Variable( y_.cuda(), volatile=True )
+#		y_onehot_ = Variable( y_onehot_.cuda(), volatile=True )
+#
+#		samples = self.G(x2D_, y_onehot_, z_)
+#	
+#		samples = samples.cpu().data.numpy()
+#		print( 'saving...')
+#		for i in range( self.batch_size ):
+#			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate', self.model_name + '_%02d_expr%02d.png'%(i,y_[i].data[0]))
+#			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
+#			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+#										self.model_name+'_recon%02d_expr%02d.npy'%(i,y_[i].data[0]))
+#			np.expand_dims(samples[i],0).dump( filename )
+
+		print( 'fixed input with different expr...')
+		# fixed input with different expr
+		nPcodes = self.Npcode
+		sample_pcode = torch.zeros( nPcodes, nPcodes )
+		for iS in range( nPcodes ):
+			ii = iS%nPcodes
+			sample_pcode[iS,ii] = 1
+		sample_pcode = Variable( sample_pcode.cuda(), volatile=True )
+		z_ = torch.normal( torch.zeros(nPcodes, self.Nz), torch.ones(nPcodes,self.Nz) )
+		z_ = Variable(z_.cuda(),volatile=True)
+
+		# for i in range( self.batch_size ):
+		for i in range( 10 ):
+			sample_x2D_s = (x2D_[i].unsqueeze(0),)*nPcodes
+			sample_x2D_ = torch.cat( sample_x2D_s )
+	
+			samples = self.G(sample_x2D_, sample_pcode, z_)
+
+			print( 'saving...{}'.format(i))
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate', 
+									self.model_name + '_%02d_varyingexpr.png'%(i))
+			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
+
+			samples_numpy = samples.cpu().data.numpy()
+			for j in range( nPcodes ):
+				filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+											self.model_name+'_sample%03d_expr%02d.npy'%(i,j))
+				np.expand_dims(samples_numpy[j],0).dump( filename )
+
 
 
 	def save(self):
@@ -640,4 +710,77 @@ class DRGAN3D(object):
 			print( self.train_hist.keys() )
 		except:
 			print('history is not found and ignored')
+
+
+	def interpolate(self, opts):
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+		
+		self.G.eval()
+
+		n_interp = opts.n_interp
+		nz = 50
+		is_enc = opts.is_enc
+		tran = transforms.ToTensor()
+
+		f_type = ""	
+		if is_enc:	
+			x2d_ = self.get_image_batch()
+
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_A.png')
+			imageio.imwrite(fname, x2d_[0].numpy().transpose(1,2,0))
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.png')
+			imageio.imwrite(fname, x2d_[1].numpy().transpose(1,2,0))
+			
+			f_type = "enc"
+
+			x_ = Variable(x2d_.cuda(), volatile=True)
+		
+			z = torch.FloatTensor(self.batch_size, nz).normal_(0.0, 1.0)
+			z = Variable(z.cuda(), volatile=True)
+			
+			# resume here on Monday night
+			z_enc = mu + z*sigma
+			z1 = (z_enc[0].unsqueeze(0))
+			z2 = (z_enc[1].unsqueeze(0))
+			
+		else:
+			z1 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
+			z2 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
+			z1, z2 = Variable(z1, volatile=True), Variable(z2, volatile=True)
+
+		
+		
+		z_interp = torch.FloatTensor(1, nz)
+
+		if self.gpu_mode:
+			z_interp = z_interp.cuda()
+			z1 = z1.cuda()
+			z2 = z2.cuda()
+			self.G = self.G.cuda()
+
+		samples_a = self.G(z1)
+		samples_a = samples_a.cpu().data.numpy()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name+f_type+'_A.npy')
+		samples_a.dump(fname)
+
+		samples_b = self.G(z2)
+		samples_b = samples_b.cpu().data.numpy()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.npy')
+		samples_b.dump(fname)
+
+
+		dz = (z2-z1)/n_interp
+
+		#make interpolation 3D
+		for i in range(1, n_interp + 1):
+			z_interp = z1 + i*dz
+			samples = self.G(z_interp)
+			if self.gpu_mode:
+				samples = samples.cpu().data.numpy()
+			else:
+				samples = samples.data.numpy()
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +f_type +'%03d.npy' % (i))
+			samples.dump(fname)
 
