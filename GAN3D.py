@@ -161,12 +161,28 @@ class GAN3D(object):
 
 
 	def train(self):
-		self.train_hist = {}
-		self.train_hist['D_loss'] = []
-		self.train_hist['G_loss'] = []
-		self.train_hist['D_acc'] = []
-		self.train_hist['per_epoch_time'] = []
-		self.train_hist['total_time'] = []
+		train_hist_keys = ['D_loss',
+							'G_loss',
+							'D_acc',
+							'per_epoch_time',
+							'total_time']
+
+		if not hasattr(self, 'epoch_start'):
+			self.epoch_start = 0
+		if not hasattr(self, 'train_hist') :
+			self.train_hist = {}
+			for key in train_hist_keys:
+				self.train_hist[key] = []
+		else:
+			existing_keys = self.train_hist.keys()
+			num_hist = [len(self.train_hist[key]) for key in existing_keys]
+			num_hist = max(num_hist)
+			for key in train_hist_keys:
+				if key not in existing_keys:
+					self.train_hist[key] = [0]*num_hist
+					print('new key added: {}'.format(key))
+
+
 
 		if self.gpu_mode:
 			self.y_real_ = Variable(torch.ones(self.batch_size, 1).cuda())
@@ -174,7 +190,7 @@ class GAN3D(object):
 		else:
 			self.y_real_, self.y_fake_ = Variable(torch.ones(self.batch_size, 1)), Variable(torch.zeros(self.batch_size, 1))
 
-		print('training start!!')
+		print('training start from epoch {}!!'.format(self.epoch_start))
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
@@ -182,7 +198,7 @@ class GAN3D(object):
 		eps = 1e-6
 		start_time = time.time()
 		self.D.train()
-		for epoch in range(self.epoch):
+		for epoch in range(self.epoch_start, self.epoch):
 			self.G.train()
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
@@ -268,8 +284,10 @@ class GAN3D(object):
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			self.save()
 			utils.loss_plot(self.train_hist, os.path.join(self.save_dir, self.dataset, self.model_name), self.model_name)
-			print("dumping x_hat from epoch {}".format(epoch+1))
-			self.dump_x_hat((epoch+1))
+
+			if epoch%3 == 0 or epoch == self.epoch-1 :
+				print("dumping x_hat from epoch {}".format(epoch+1))
+				self.dump_x_hat((epoch+1))
 
 		self.train_hist['total_time'].append(time.time() - start_time)
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -309,35 +327,35 @@ class GAN3D(object):
 
 
 	def visualize_results(self, epoch, fix=True):
-		self.dump_x_hat( epoch, fix=fix )
-#		self.G.eval()
-#
-#		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
-#			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-#
-#		if fix:
-#			""" fixed noise """
-#			samples = self.G(self.sample_z_)
-#		else:
-#			""" random noise """
-#			if self.gpu_mode:
-#				sample_z_ = Variable(torch.rand((self.batch_size, self.Nz)).cuda(), volatile=True)
-#			else:
-#				sample_z_ = Variable(torch.rand((self.batch_size, self.Nz)), volatile=True)
-#
-#			samples = self.G(sample_z_)
-#
-#		samples = samples>0.5
-#
-#		if self.gpu_mode:
-#			samples = samples.cpu().data.numpy().squeeze()
-#		else:
-#			samples = samples.data.numpy().squeeze()
-#
-#		for i in range( self.test_sample_size ):
-#			filename = os.path.join( self.result_dir, self.dataset, self.model_name,
-#										self.model_name+'_e%03d_sample%02d.png'%(epoch,i))
-#			plot_voxel( samples[i] , save_file=filename )
+		print( 'visualizing result...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+
+		self.G.eval()
+
+		if fix:
+			""" fixed noise """
+			samples = self.G(self.sample_z_)
+		else:
+			""" random noise """
+			sample_z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz)*0.33)
+			if self.gpu_mode:
+				sample_z_ = Variable(sample_z_.cuda(), volatile=True)
+			else:
+				sample_z_ = Variable(sample_z_, volatile=True)
+
+			samples = self.G(sample_z_)
+
+		if self.gpu_mode:
+			samples = samples.cpu().data.numpy().squeeze()
+		else:
+			samples = samples.data.numpy().squeeze()
+
+		for i in range( self.batch_size ):
+			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+										self.model_name+'_e%03d_sample%02d.npy'%(epoch,i))
+			np.expand_dims(samples[i],0).dump( filename )
 
 	def save(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
@@ -356,3 +374,95 @@ class GAN3D(object):
 
 		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
 		self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
+
+		try:
+			with open(os.path.join(save_dir, self.model_name + '_history.pkl')) as fhandle:
+				self.train_hist = pickle.load(fhandle)
+			
+			self.epoch_start = len(self.train_hist['per_epoch_time'])
+			print( 'loaded epoch {}'.format(self.epoch_start) )
+			print( 'history has following keys:' )
+			print( self.train_hist.keys() )
+		except:
+			print('history is not found and ignored')
+
+	def get_image_batch(self):
+		dataIter = iter(self.data_loader)
+		return next(dataIter)[2]
+
+	def interpolate(self, opts):
+		
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+
+		self.G.eval()
+
+		n_interp = opts.n_interp
+		nz = 50
+		is_enc = opts.is_enc
+		tran = transforms.ToTensor()
+
+		# interpolate between twe noise(z1, z2).
+		f_type = ""	
+		if is_enc:	
+			x2d_ = self.get_image_batch()
+
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_A.png')
+			imageio.imwrite(fname, x2d_[0].numpy().transpose(1,2,0))
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.png')
+			imageio.imwrite(fname, x2d_[1].numpy().transpose(1,2,0))
+			
+			f_type = "enc"
+
+			x_ = Variable(x2d_.cuda())
+		
+			dis = self.Enc(x_)
+			mu, sigma = Gaussian_distribution(dis)
+
+			z = torch.FloatTensor(self.batch_size, nz).normal_(0.0, 1.0)
+			z = Variable(z.cuda())
+			
+			z_enc = mu + z*sigma
+			z1 = (z_enc[0].unsqueeze(0))
+			z2 = (z_enc[1].unsqueeze(0))
+			
+		else:
+			z1 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
+			z2 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
+			z1, z2 = Variable(z1), Variable(z2)
+
+		
+		
+		z_interp = torch.FloatTensor(1, nz)
+
+		if self.gpu_mode:
+			z_interp = z_interp.cuda()
+			z1 = z1.cuda()
+			z2 = z2.cuda()
+			self.G = self.G.cuda()
+
+		samples_a = self.G(z1)
+		samples_a = samples_a.cpu().data.numpy()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name+f_type+'_A.npy')
+		samples_a.dump(fname)
+
+		samples_b = self.G(z2)
+		samples_b = samples_b.cpu().data.numpy()
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.npy')
+		samples_b.dump(fname)
+
+
+		dz = (z2-z1)/n_interp
+
+		#make interpolation 3D
+		for i in range(1, n_interp + 1):
+			z_interp = z1 + i*dz
+			samples = self.G(z_interp)
+			if self.gpu_mode:
+				samples = samples.cpu().data.numpy()
+			else:
+				samples = samples.data.numpy()
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +f_type +'%03d.npy' % (i))
+			samples.dump(fname)
+
