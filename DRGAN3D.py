@@ -229,6 +229,14 @@ class DRGAN3D(object):
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 			self.Nz = 50
 
+		# networks init
+		self.G = generator(self.Nid, self.Npcode, self.Nz)
+		self.D = discriminator(self.Nid, self.Npcode)
+		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
+		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
+
+		if hasattr(args, 'comment1'):
+			return
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
 		if args.interpolate or args.generate:
@@ -301,11 +309,6 @@ class DRGAN3D(object):
 				self.sample_z_ = Variable(self.sample_z_, volatile=True)
 				self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
 
-		# networks init
-		self.G = generator(self.Nid, self.Npcode, self.Nz)
-		self.D = discriminator(self.Nid, self.Npcode)
-		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
-		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
 		if self.gpu_mode:
 			self.G.cuda()
@@ -637,19 +640,19 @@ class DRGAN3D(object):
 		z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
 
 		x2D_, z_ = Variable(x2D.cuda(),volatile=True), Variable(z_.cuda(),volatile=True)
-#		y_ = Variable( y_.cuda(), volatile=True )
-#		y_onehot_ = Variable( y_onehot_.cuda(), volatile=True )
-#
-#		samples = self.G(x2D_, y_onehot_, z_)
-#	
-#		samples = samples.cpu().data.numpy()
-#		print( 'saving...')
-#		for i in range( self.batch_size ):
-#			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate', self.model_name + '_%02d_expr%02d.png'%(i,y_[i].data[0]))
-#			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
-#			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
-#										self.model_name+'_recon%02d_expr%02d.npy'%(i,y_[i].data[0]))
-#			np.expand_dims(samples[i],0).dump( filename )
+		y_ = Variable( y_.cuda(), volatile=True )
+		y_onehot_ = Variable( y_onehot_.cuda(), volatile=True )
+
+		samples = self.G(x2D_, y_onehot_, z_)
+	
+		samples = samples.cpu().data.numpy()
+		print( 'saving...')
+		for i in range( self.batch_size ):
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate', self.model_name + '_%02d_expr%02d.png'%(i,y_[i].data[0]))
+			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
+			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+										self.model_name+'_recon%02d_expr%02d.npy'%(i,y_[i].data[0]))
+			np.expand_dims(samples[i],0).dump( filename )
 
 		print( 'fixed input with different expr...')
 		# fixed input with different expr
@@ -662,8 +665,8 @@ class DRGAN3D(object):
 		z_ = torch.normal( torch.zeros(nPcodes, self.Nz), torch.ones(nPcodes,self.Nz) )
 		z_ = Variable(z_.cuda(),volatile=True)
 
-		# for i in range( self.batch_size ):
-		for i in range( 10 ):
+		for i in range( self.batch_size ):
+		# for i in range( 10 ):
 			sample_x2D_s = (x2D_[i].unsqueeze(0),)*nPcodes
 			sample_x2D_ = torch.cat( sample_x2D_s )
 	
@@ -724,63 +727,66 @@ class DRGAN3D(object):
 		is_enc = opts.is_enc
 		tran = transforms.ToTensor()
 
-		f_type = ""	
-		if is_enc:	
-			x2d_ = self.get_image_batch()
+		_, y, x2D = self.get_image_batch()
 
-			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_A.png')
-			imageio.imwrite(fname, x2d_[0].numpy().transpose(1,2,0))
-			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.png')
-			imageio.imwrite(fname, x2d_[1].numpy().transpose(1,2,0))
-			
-			f_type = "enc"
-
-			x_ = Variable(x2d_.cuda(), volatile=True)
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + '_A.png')
+		imageio.imwrite(fname, x2D[0].numpy().transpose(1,2,0))
+		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + '_B.png')
+		imageio.imwrite(fname, x2D[1].numpy().transpose(1,2,0))
 		
-			z = torch.FloatTensor(self.batch_size, nz).normal_(0.0, 1.0)
-			z = Variable(z.cuda(), volatile=True)
-			
-			# resume here on Monday night
-			z_enc = mu + z*sigma
-			z1 = (z_enc[0].unsqueeze(0))
-			z2 = (z_enc[1].unsqueeze(0))
-			
-		else:
-			z1 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
-			z2 = torch.FloatTensor(1, nz).normal_(0.0, 1.0)
-			z1, z2 = Variable(z1, volatile=True), Variable(z2, volatile=True)
-
-		
-		
-		z_interp = torch.FloatTensor(1, nz)
+		z = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
+		y = y['pcode']
+		y_onehot = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot.scatter_(1, y.view(-1,1), 1)
 
 		if self.gpu_mode:
-			z_interp = z_interp.cuda()
-			z1 = z1.cuda()
-			z2 = z2.cuda()
 			self.G = self.G.cuda()
-
-		samples_a = self.G(z1)
-		samples_a = samples_a.cpu().data.numpy()
-		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name+f_type+'_A.npy')
-		samples_a.dump(fname)
-
-		samples_b = self.G(z2)
-		samples_b = samples_b.cpu().data.numpy()
-		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + f_type+'_B.npy')
-		samples_b.dump(fname)
+			x2D, z = Variable(x2D.cuda(),volatile=True), Variable(z.cuda(),volatile=True)
+			y = Variable( y.cuda(), volatile=True )
+			y_onehot = Variable( y_onehot.cuda(), volatile=True )
 
 
-		dz = (z2-z1)/n_interp
+		samples = self.G(x2D, y_onehot, z)
+	
+		samples = samples.cpu().data.numpy()
+		print( 'saving...')
+		for i in range( self.batch_size ):
+			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'interp',
+										self.model_name+'_recon%02d_expr%02d.npy'%(i,y[i].data[0]))
+			np.expand_dims(samples[i],0).dump( filename )
+		
+		dy = (y_onehot[1].unsqueeze(0)-y_onehot[0].unsqueeze(0))/n_interp
 
 		#make interpolation 3D
-		for i in range(1, n_interp + 1):
-			z_interp = z1 + i*dz
-			samples = self.G(z_interp)
+		singleX2D = x2D[0].unsqueeze(0)
+		for i in range(1, n_interp):
+			y_interp = y_onehot[0].unsqueeze(0) + i*dy
+			samples = self.G(singleX2D, y_interp, z[0].unsqueeze(0))
 			if self.gpu_mode:
 				samples = samples.cpu().data.numpy()
 			else:
 				samples = samples.data.numpy()
-			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +f_type +'%03d.npy' % (i))
+			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +'%03d.npy' % (i))
 			samples.dump(fname)
+			
+	def compare(self, x2D, y_, y_onehot ):
+		print( 'comparing result...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, 'compare' ) 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+
+		# reconstruction (inference 2D-to-3D )
+		""" random noise """
+		z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
+		z_ = Variable(z_.cuda(),volatile=True)
+
+		samples = self.G(x2D, y_onehot, z_)
+	
+		samples = samples.cpu().data.numpy()
+		print( 'saving...')
+		for i in range( self.batch_size ):
+			filename = os.path.join( self.result_dir, self.dataset, 'compare',
+										self.model_name+'_recon_%02d_expr%02d.npy'%(i,y_[i]))
+			np.expand_dims(samples[i],0).dump( filename )
+
 

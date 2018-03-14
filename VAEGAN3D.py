@@ -181,6 +181,16 @@ class VAEGAN3D(object):
 			exit("unknown dataset: " + self.dataset)
 
 
+		# networks init
+		self.G = generator( self.Nz, self.nOutputChannels )
+		self.D = discriminator( )
+		self.Enc = Encoder( self.Nz, self.nInputChannels )
+		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
+		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
+		self.Enc_optimizer = optim.Adam(self.Enc.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
+
+		if hasattr(args, 'comment1'):
+			return
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
 		if not os.path.exists( path_sample ):
@@ -249,13 +259,6 @@ class VAEGAN3D(object):
 				self.sample_z_ = Variable(self.sample_z_, volatile=True)
 				self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
 
-		# networks init
-		self.G = generator( self.Nz, self.nOutputChannels )
-		self.D = discriminator( )
-		self.Enc = Encoder( self.Nz, self.nInputChannels )
-		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
-		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
-		self.Enc_optimizer = optim.Adam(self.Enc.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
 		if self.gpu_mode:
 			self.G.cuda()
@@ -601,4 +604,32 @@ class VAEGAN3D(object):
 				samples = samples.data.numpy()
 			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +f_type +'%03d.npy' % (i))
 			samples.dump(fname)
+
+
+	def compare(self, x2D):
+		print( 'visualizing result...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+
+		self.G.eval()
+		self.Enc.eval()
+
+		# reconstruction (inference 2D-to-3D )
+		dis = self.Enc(x2D)
+		mu, sigma = Gaussian_distribution(dis)
+
+		z = torch.FloatTensor(self.batch_size, self.Nz).normal_(0.0, 1.0)
+		z = Variable(z.cuda())
+		
+		z_enc = mu + z*sigma
+
+		samples = self.G(z_enc)
+		samples = samples.cpu().data.numpy()
+		print( 'saving...')
+		for i in range( self.batch_size ):
+			filename = os.path.join( self.result_dir, self.dataset, 'compare',
+										self.model_name+'_recon_%02d.npy'%(i))
+			np.expand_dims(samples[i],0).dump( filename )
+
 
