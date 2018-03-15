@@ -101,7 +101,7 @@ class IKEA(Dataset):
 
 class Bosphorus( Dataset ):
 	def __init__( self, root_dir, transform=None, use_image=False, use_colorPCL=True,
-					skipCodes=[], shape=64, image_shape=256, center=True):
+					inclCodes=[], skipCodes=[], shape=64, image_shape=256, center=True):
 		self.root_dir = root_dir
 		self.filenames = {}
 		self.transform = transform
@@ -111,6 +111,49 @@ class Bosphorus( Dataset ):
 		self.shape = shape
 		self.image_shape = image_shape
 		self.center = center
+
+		if len(skipCodes) > 0:
+			self.skipCodes = skipCodes
+		else:
+			self.skipCodes = ['O_GLASSES',
+								'O_HAIR',
+								'YR_',
+								'CR_',
+								'PR_',
+								'CAU_',
+								'E_',
+								'LFAU_12LW',
+								'LFAU_14',
+								'LFAU_15',
+								'LFAU_16',
+								'LFAU_17',
+								'LFAU_18',
+								'LFAU_20',
+								'LFAU_23',
+								'LFAU_24',
+								'LFAU_25',
+								'LFAU_26',
+								'LFAU_28',
+								'UFAU_44',
+								'UFAU_1',
+								'IGN',
+								]
+		if len(inclCodes) > 0:
+			self.inclCodes = inclCodes
+		else:
+			self.inclCodes = ['LFAU_9',
+								'LFAU_10',
+								'LFAU_12',
+								'LFAU_12L',
+								'LFAU_12R',
+								'LFAU_22',
+								'LFAU_27',
+								'LFAU_34',
+								'N_N',
+								'UFAU_2',
+								'UFAU_4',
+								'UFAU_43',
+								]
 
 		print('Loading Bosphorus metadata...', end='')
 		print('\t(center={})\t'.format(center), end='')
@@ -122,12 +165,13 @@ class Bosphorus( Dataset ):
 			self.filenames = open(fname_cache).read().splitlines()
 			print( '{} samples restored from {}'.format(len(self.filenames),fname_cache) )
 		else:
-			def checkCode(fname, codes):
+			def checkCode(fname, codes, skipCodes = []):
 				identity, poseclass, posecode, samplenum =  fname[:-len(self.suffix)].split('_')
-				return poseclass not in codes
+#				return poseclass in codes and poseclass not in skipCodes
+				return poseclass+"_"+posecode in codes
 				
 			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(root_dir)
-							for f in files if f.endswith(self.suffix) and checkCode(f,skipCodes) ]
+							for f in files if f.endswith(self.suffix) and checkCode(f,self.inclCodes,self.skipCodes) ]
 	
 			print('{:.0f}sec, {} files found.'.format( time.time()-time_start, len(self.filenames)))
 	

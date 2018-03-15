@@ -221,7 +221,7 @@ class DRGAN3D(object):
 			self.Ni = 20
 			self.Nz = 50
 		elif self.dataset == 'Bosphorus':
-			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, 
 											transform=transforms.ToTensor(),
 											shape=128, image_shape=256, center=self.centerBosphorus),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
