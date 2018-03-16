@@ -62,14 +62,16 @@ def parse_args():
 	parser.add_argument('--gpu_mode', type=str2bool, default=True)
 	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
+	parser.add_argument('--fname_cache', type=str, default='', help='filename of cached datalist, ex)cache_Bosphorus.txt')
 	parser.add_argument('--resume', type=str2bool, default=False, help='resume training from saved model')
 	parser.add_argument('--centerBosphorus', type=str2bool, default=True, help='center Bosphorus PCL in voxel space')
 	parser.add_argument('--loss_option', type=str, default='', help='recon,dist,GP')
 	parser.add_argument('--n_critic', type=int, default=1, help='n_critic')
 	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
+	parser.add_argument('--nDaccAvg', type=int, default=5, help='number of batches for moving averaging D_acc')
 
 	# below arguments are for interpolation (eval mode)
-	parser.add_argument('--interpolate', type=str2bool, default=False, help='generate samples with interpolation from saved model')
+	parser.add_argument('--interpolate', type=str, default='', help='generate samples with interpolation from saved model')
 	parser.add_argument('--is_enc', type=str2bool, default=False, help='make latent variable from input images')
 	parser.add_argument('--n_interp', type=int, default=20, help='number of interpolation points')
 
@@ -191,7 +193,10 @@ def main():
 	if opts.generate:
 		gan.visualize_results( opts.epoch, opts.fix_z )
 	if opts.interpolate:
-		gan.interpolate( opts )
+		if opts.interpolate == 'z':
+			gan.interpolate_z( opts )
+		elif opts.interpolate == 'id':
+			gan.interpolate_id( opts )
 	print(" [*] Testing finished!")
 
 if __name__ == '__main__':

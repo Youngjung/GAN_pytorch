@@ -222,7 +222,7 @@ class DRGAN3D(object):
 			self.Ni = 20
 			self.Nz = 50
 		elif self.dataset == 'Bosphorus':
-			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, 
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
 											shape=128, image_shape=256, center=self.centerBosphorus),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
@@ -719,8 +719,49 @@ class DRGAN3D(object):
 		except:
 			print('history is not found and ignored')
 
+	def interpolate_z(self, opts):
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp_z') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+		
+		self.G.eval()
 
-	def interpolate(self, opts):
+		n_interp = opts.n_interp
+
+		_, y, x2D = self.get_image_batch()
+
+		fname = os.path.join( save_dir, self.model_name + '_input.png')
+		imageio.imwrite(fname, x2D[0].numpy().transpose(1,2,0))
+		
+		z1 = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
+		z2 = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
+		y = y['pcode']
+		y_onehot = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot.scatter_(1, y.view(-1,1), 1)
+
+		if self.gpu_mode:
+			self.G = self.G.cuda()
+			x2D = Variable(x2D.cuda(),volatile=True)
+			z1, z2 = Variable(z1.cuda(),volatile=True), Variable(z2.cuda(),volatile=True)
+			y = Variable( y.cuda(), volatile=True )
+			y_onehot = Variable( y_onehot.cuda(), volatile=True )
+
+
+		dz = (z2-z1)/n_interp
+
+		#make interpolation 3D
+		singleX2D = x2D[0].unsqueeze(0)
+		for i in range(1, n_interp):
+			z_interp = z1 + i*dz
+			samples = self.G(singleX2D, y_onehot[0].unsqueeze(0), z_interp[0].unsqueeze(0))
+			if self.gpu_mode:
+				samples = samples.cpu().data.numpy()
+			else:
+				samples = samples.data.numpy()
+			fname = os.path.join(save_dir, self.model_name +'interp_z_%03d.npy' % (i))
+			samples.dump(fname)
+	
+	def interpolate_id(self, opts):
 		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp') 
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
@@ -728,9 +769,6 @@ class DRGAN3D(object):
 		self.G.eval()
 
 		n_interp = opts.n_interp
-		nz = 50
-		is_enc = opts.is_enc
-		tran = transforms.ToTensor()
 
 		_, y, x2D = self.get_image_batch()
 

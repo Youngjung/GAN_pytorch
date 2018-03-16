@@ -100,7 +100,7 @@ class IKEA(Dataset):
 
 
 class Bosphorus( Dataset ):
-	def __init__( self, root_dir, transform=None, use_image=False, use_colorPCL=True,
+	def __init__( self, root_dir, transform=None, use_image=False, use_colorPCL=True, fname_cache='',
 					inclCodes=[], skipCodes=[], shape=64, image_shape=256, center=True):
 		self.root_dir = root_dir
 		self.filenames = {}
@@ -122,6 +122,7 @@ class Bosphorus( Dataset ):
 								'PR_',
 								'CAU_',
 								'E_',
+								'LFAU_10',
 								'LFAU_12LW',
 								'LFAU_14',
 								'LFAU_15',
@@ -142,7 +143,6 @@ class Bosphorus( Dataset ):
 			self.inclCodes = inclCodes
 		else:
 			self.inclCodes = ['LFAU_9',
-								'LFAU_10',
 								'LFAU_12',
 								'LFAU_12L',
 								'LFAU_12R',
@@ -160,7 +160,8 @@ class Bosphorus( Dataset ):
 		sys.stdout.flush()
 		time_start = time.time()
 
-		fname_cache = 'cache_Bosphorus.txt'
+		if len(fname_cache) == 0:
+			fname_cache = 'cache_Bosphorus.txt'
 		if os.path.exists(fname_cache):
 			self.filenames = open(fname_cache).read().splitlines()
 			print( '{} samples restored from {}'.format(len(self.filenames),fname_cache) )
