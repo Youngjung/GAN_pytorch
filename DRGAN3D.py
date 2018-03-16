@@ -166,6 +166,7 @@ class DRGAN3D(object):
 		self.n_critic = args.n_critic
 		self.n_gen = args.n_gen
 		self.c = 0.01 # for wgan
+		self.nDaccAvg = args.nDaccAvg
 		if 'wass' in self.loss_option:
 			self.n_critic = 5
 
@@ -341,10 +342,12 @@ class DRGAN3D(object):
                            'G_loss_GAN_fake',
                            'G_loss_id',
                            'G_loss_pcode',
-                           'G_loss_recon',
-                           'G_loss_dist',
                            'per_epoch_time',
                            'total_time']
+		if 'recon' in self.loss_option:
+			train_hist_keys.append('G_loss_recon')
+		if 'dist' in self.loss_option:
+			train_hist_keys.append('G_loss_dist')
 
 		if not hasattr(self, 'epoch_start'):
 			self.epoch_start = 0
@@ -489,8 +492,10 @@ class DRGAN3D(object):
 						self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
 						self.train_hist['D_acc'].append(D_acc)
 	
+					divisor = min( len(self.train_hist['D_acc']), self.nDaccAvg )
+					D_acc_avg = sum( self.train_hist['D_acc'][-self.nDaccAvg:] )/divisor
 					D_loss.backward()
-					if D_acc < 0.8:
+					if D_acc_avg < 0.8:
 						self.D_optimizer.step()
 
 					if 'wass' in self.loss_option and 'GP' not in self.loss_option:
@@ -565,9 +570,9 @@ class DRGAN3D(object):
 					hours = secs//3600
 					mins = secs/60%60
 					#print("%2dh%2dm E:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f+%.4f,\n\t\t\t G: %.4f=%.4f+%.4f+%.4f" %
-					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f,G: %.4f, D_acc:%.4f" %
+					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f,G: %.4f, D_acc:%.4f/%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  D_loss.data[0], G_loss.data[0], D_acc) )
+						  D_loss.data[0], G_loss.data[0], D_acc, D_acc_avg) )
 #						  D_loss.data[0], D_loss_GANreal.data[0], D_loss_real_id.data[0],
 #						  D_loss_real_pcode.data[0], D_loss_GANfake.data[0],
 #						  G_loss.data[0], G_loss_GANfake.data[0], G_loss_id.data[0],
