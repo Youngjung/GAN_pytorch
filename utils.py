@@ -193,7 +193,6 @@ class Bosphorus( Dataset ):
 		for i, posecode in enumerate( self.posecodes ):
 			self.posecodemap[posecode] = i
 
-
 		fname_stats = os.path.join( root_dir, 'stats.pkl' )
 		with open( fname_stats ) as fhandle:
 			stats = pickle.load( fhandle )
