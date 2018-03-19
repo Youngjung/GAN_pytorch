@@ -20,6 +20,7 @@ from DRcycleGAN3D import DRcycleGAN3D
 from CycleGAN3D import CycleGAN3D
 from AE3D import AutoEncoder3D
 from DRGAN2D import DRGAN2D 
+from DRecon3DGAN import DRecon3DGAN
 
 def str2bool(v):
 	if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -39,6 +40,7 @@ def parse_args():
 									'DRGAN', 'AE',
 									'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'DRGAN2D',
 									'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
+									'DRecon3DGAN',
 									'AE3D'],
 						help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='Bosphorus', 
@@ -176,6 +178,8 @@ def main():
 		gan = AutoEncoder3D(opts)
 	elif opts.gan_type == 'DRGAN2D':
 		gan = DRGAN2D(opts)
+	elif opts.gan_type == 'DRecon3DGAN':
+		gan = DRecon3DGAN(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
