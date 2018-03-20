@@ -245,34 +245,39 @@ class DRecon3DGAN(object):
 		elif not os.path.exists( path_sample ):
 			print( 'Generating fixed sample for visualization...' )
 			os.makedirs( path_sample )
-			nSamples = self.sample_num-self.Npcode
 			nPcodes = self.Npcode
-			sample_x2D_s = []
-			sample_x3D_s = []
+			nSamples = self.sample_num-nPcodes*3 # 13 people with fixed pcode, but note that 3 people with all pcodes will be added
+			list_sample_x2Ds_raw = []
+			list_sample_x3Ds_raw = []
 			for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
-				sample_x2D_s.append( sample_x2D_ )
-				sample_x3D_s.append( sample_x3D_ )
-				if iB > nSamples // self.batch_size:
+				list_sample_x2Ds_raw.append( sample_x2D_ )
+				list_sample_x3Ds_raw.append( sample_x3D_ )
+				if iB > (nSamples+3) // self.batch_size:
 					break
-			sample_x2D_s = torch.cat( sample_x2D_s )[:nSamples,:,:,:]
-			sample_x3D_s = torch.cat( sample_x3D_s )[:nSamples,:,:,:]
-			sample_x2D_s = torch.split( sample_x2D_s, 1 )
-			sample_x3D_s = torch.split( sample_x3D_s, 1 )
-			sample_x2D_s += (sample_x2D_s[0],)*nPcodes
-			sample_x3D_s += (sample_x3D_s[0],)*nPcodes
-	#		sample_x2D_s = [ [x]*nPcodes for x in sample_x2D_s ]
-	#		sample_x3D_s = [ [x]*nPcodes for x in sample_x3D_s ]
-	#		flatten = lambda l: [item for sublist in l for item in sublist]
+			# store different people for fixed pcode
+			sample_x2D_s = list_sample_x2Ds_raw[:nSamples]
+			sample_x3D_s = list_sample_x3Ds_raw[:nSamples]
+			#sample_x2D_s = torch.cat( list_sample_x2Ds_raw )[:nSamples,:,:,:]
+			#sample_x3D_s = torch.cat( list_sample_x3Ds_raw )[:nSamples,:,:,:]
+			#sample_x2D_s = torch.split( sample_x2D_s, 1 )
+			#sample_x3D_s = torch.split( sample_x3D_s, 1 )
+
+			# add 3 people for all pcodes
+			sample_x2D_s += list_sample_x2Ds_raw[nSamples:nSamples+3]*nPcodes
+			sample_x3D_s += list_sample_x3Ds_raw[nSamples:nSamples+3]*nPcodes
+
+			# concat all people
 			self.sample_x2D_ = torch.cat( sample_x2D_s )
 			self.sample_x3D_ = torch.cat( sample_x3D_s )
-	#		sample_x2D_s = [sample_x2D_s[0][0].unsqueeze(0)]*nSamples
-			self.sample_pcode_ = torch.zeros( nSamples+nPcodes, self.Npcode )
-			self.sample_pcode_[:nSamples,0]=1
+
+			# make pcodes
+			self.sample_pcode_ = torch.zeros( nSamples+nPcodes*3, self.Npcode )
+			self.sample_pcode_[:nSamples,-1]=1 # N ( neutral )
 			for iS in range( nPcodes ):
 				ii = iS%self.Npcode
 				self.sample_pcode_[iS+nSamples,ii] = 1
 	
-			nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes ) )) # num samples per side
+			nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes*3 ) )) # num samples per side
 			fname = os.path.join( path_sample, 'sampleGT.png')
 			utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
 	
@@ -619,7 +624,7 @@ class DRecon3DGAN(object):
 		self.G.eval()
 
 		# reconstruction (inference 2D-to-3D )
-		_, y_, x2D = self.get_image_batch()
+		x3D, y_, x2D = self.get_image_batch()
 		y_ = y_['pcode']
 		y_onehot_ = torch.zeros( self.batch_size, self.Npcode )
 		y_onehot_.scatter_(1, y_.view(-1,1), 1)
@@ -638,6 +643,9 @@ class DRecon3DGAN(object):
 			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
 										self.model_name+'_recon%02d_expr%02d.npy'%(i,y_[i].data[0]))
 			np.expand_dims(samples[i],0).dump( filename )
+			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+										self.model_name+'_recon%02d_GT_expr%02d.npy'%(i,y_[i].data[0]))
+			np.expand_dims(x3D[i],0).dump( filename )
 
 		print( 'fixed input with different expr...')
 		# fixed input with different expr
