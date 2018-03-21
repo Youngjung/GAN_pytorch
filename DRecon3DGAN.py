@@ -48,33 +48,86 @@ class Decoder( nn.Module ):
 		self.nOutputCh = nOutputCh
 		self.Npcode = Npcode
 
-		self.fc = nn.Sequential(
-			nn.Linear( 320+Npcode, 320 )
-		)
-
-		self.fconv = nn.Sequential(
-			nn.ConvTranspose3d(320+Npcode, 512, 4, bias=False),
+		self.deconv = nn.Sequential(
+			# 4
+			nn.Conv3d(320+Npcode, 512, 4,1,3, bias=False),
 			nn.BatchNorm3d(512),
-			nn.ReLU(),
-			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
+			nn.LeakyReLU(0.2),
+			#nn.Conv3d(512, 512, 3,1,1, bias=False),
+			#nn.BatchNorm3d(512),
+			#nn.LeakyReLU(0.2),
+
+			# 8
+			nn.Upsample(scale_factor=2, mode='nearest'),
+			nn.Conv3d(512, 256, 3,1,1, bias=False),
 			nn.BatchNorm3d(256),
-			nn.ReLU(),
-			nn.ConvTranspose3d(256, 128, 4, 2, 1, bias=False),
+			nn.LeakyReLU(0.2),
+			#nn.Conv3d(256, 256, 3,1,1, bias=False),
+			#nn.BatchNorm3d(256),
+			#nn.LeakyReLU(0.2),
+
+			# 16
+			nn.Upsample(scale_factor=2, mode='nearest'),
+			nn.Conv3d(256, 128, 3,1,1, bias=False),
 			nn.BatchNorm3d(128),
-			nn.ReLU(),
-			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
+			nn.LeakyReLU(0.2),
+			#nn.Conv3d(128, 128, 3,1,1, bias=False),
+			#nn.BatchNorm3d(128),
+			#nn.LeakyReLU(0.2),
+
+			# 32
+			nn.Upsample(scale_factor=2, mode='nearest'),
+			nn.Conv3d(128, 64, 3,1,1, bias=False),
 			nn.BatchNorm3d(64),
-			nn.ReLU(),
-			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
+			nn.LeakyReLU(0.2),
+			#nn.Conv3d(64, 64, 3,1,1, bias=False),
+			#nn.BatchNorm3d(64),
+			#nn.LeakyReLU(0.2),
+
+			# 64 
+			nn.Upsample(scale_factor=2, mode='nearest'),
+			nn.Conv3d(64, 32, 3,1,1, bias=False),
 			nn.BatchNorm3d(32),
-			nn.ReLU(),
-			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
+			nn.LeakyReLU(0.2),
+			#nn.Conv3d(32, 32, 3,1,1, bias=False),
+			#nn.BatchNorm3d(32),
+			#nn.LeakyReLU(0.2),
+
+			# 128
+			nn.Upsample(scale_factor=2, mode='nearest'),
+			nn.Conv3d(32, 16, 3,1,1, bias=False),
+			nn.BatchNorm3d(16),
+			nn.LeakyReLU(0.2),
+			#nn.Conv3d(16, 16, 3,1,1, bias=False),
+			#nn.BatchNorm3d(16),
+			#nn.LeakyReLU(0.2),
+
+			# last layer
+			nn.Conv3d(16, nOutputCh, 1,1,0, bias=False),
 			nn.Sigmoid(),
+
+#			nn.ConvTranspose3d(320+Npcode, 512, 4, bias=False),
+#			nn.BatchNorm3d(512),
+#			nn.ReLU(),
+#			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
+#			nn.BatchNorm3d(256),
+#			nn.ReLU(),
+#			nn.ConvTranspose3d(256, 128, 4, 2, 1, bias=False),
+#			nn.BatchNorm3d(128),
+#			nn.ReLU(),
+#			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
+#			nn.BatchNorm3d(64),
+#			nn.ReLU(),
+#			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
+#			nn.BatchNorm3d(32),
+#			nn.ReLU(),
+#			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
+#			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot):
 		feature = torch.cat((fx, y_pcode_onehot),1)
 #		x = self.fc( feature )
-		x = self.fconv( feature.unsqueeze(2).unsqueeze(3).unsqueeze(4) )
+		x = self.deconv( feature.unsqueeze(2).unsqueeze(3).unsqueeze(4) )
 		return x
 
 class Decoder2D( nn.Module ):
@@ -301,17 +354,18 @@ class DRecon3DGAN(object):
 			#sample_x3D_s = torch.split( sample_x3D_s, 1 )
 
 			# add 3 people for all pcodes
-			sample_x2D_s += list_sample_x2Ds_raw[nSamples:nSamples+3]*nPcodes
-			sample_x3D_s += list_sample_x3Ds_raw[nSamples:nSamples+3]*nPcodes
+			for i in range(3):
+				sample_x2D_s += list_sample_x2Ds_raw[nSamples+i:nSamples+i+1]*nPcodes
+				sample_x3D_s += list_sample_x3Ds_raw[nSamples+i:nSamples+i+1]*nPcodes
 
 			# concat all people
 			self.sample_x2D_ = torch.cat( sample_x2D_s )
 			self.sample_x3D_ = torch.cat( sample_x3D_s )
 
 			# make pcodes
-			self.sample_pcode_ = torch.zeros( nSamples+nPcodes*3, self.Npcode )
+			self.sample_pcode_ = torch.zeros( nSamples+nPcodes*3, nPcodes )
 			self.sample_pcode_[:nSamples,-1]=1 # N ( neutral )
-			for iS in range( nPcodes ):
+			for iS in range( nPcodes*3 ):
 				ii = iS%self.Npcode
 				self.sample_pcode_[iS+nSamples,ii] = 1
 	
@@ -690,7 +744,7 @@ class DRecon3DGAN(object):
 		# fixed input with different expr
 		nPcodes = self.Npcode
 		sample_pcode = torch.zeros( nPcodes, nPcodes )
-		for iS in range( nPcodes ):
+		for iS in range( nPcodes*3 ):
 			ii = iS%nPcodes
 			sample_pcode[iS,ii] = 1
 		sample_pcode = Variable( sample_pcode.cuda(), volatile=True )
