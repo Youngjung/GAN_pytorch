@@ -78,11 +78,11 @@ class Decoder( nn.Module ):
 
 
 class generator(nn.Module):
-	def __init__(self, Nid, Npcode):
+	def __init__(self, Nid, Npcode, nOutputCh=4):
 		super(generator, self).__init__()
 
 		self.Genc = Encoder('Genc', Nid, Npcode)
-		self.Gdec = Decoder(Npcode)
+		self.Gdec = Decoder(Npcode, nOutputCh)
 
 		utils.initialize_weights(self)
 
@@ -224,15 +224,16 @@ class DRecon3DGAN(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
-											shape=128, image_shape=256, center=self.centerBosphorus),
+											shape=128, image_shape=256, center=self.centerBosphorus,
+											use_colorPCL=False),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 			self.Nz = 50
 
 		# networks init
-		self.G = generator(self.Nid, self.Npcode)
-		self.D = discriminator(self.Nid, self.Npcode)
+		self.G = generator(self.Nid, self.Npcode, nOutputCh=1)
+		self.D = discriminator(self.Nid, self.Npcode, nInputCh=1)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
@@ -255,6 +256,8 @@ class DRecon3DGAN(object):
 				if iB > (nSamples+3) // self.batch_size:
 					break
 			# store different people for fixed pcode
+			list_sample_x2Ds_raw = torch.split( torch.cat(list_sample_x2Ds_raw),1)
+			list_sample_x3Ds_raw = torch.split( torch.cat(list_sample_x3Ds_raw),1)
 			sample_x2D_s = list_sample_x2Ds_raw[:nSamples]
 			sample_x3D_s = list_sample_x3Ds_raw[:nSamples]
 			#sample_x2D_s = torch.cat( list_sample_x2Ds_raw )[:nSamples,:,:,:]
@@ -575,11 +578,12 @@ class DRecon3DGAN(object):
 #						  G_loss_pcode.data[0]) )
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
+			if epoch%5 == 0:
+				self.dump_x_hat((epoch+1))
 			self.save()
 			utils.loss_plot(self.train_hist,
 							os.path.join(self.save_dir, self.dataset, self.model_name),
 							self.model_name, use_subplot=True)
-			self.dump_x_hat((epoch+1))
 
 		self.train_hist['total_time'].append(time.time() - start_time)
 		print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
