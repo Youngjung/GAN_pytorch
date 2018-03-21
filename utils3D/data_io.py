@@ -24,25 +24,31 @@ def read_bnt(path):
 	
 	return pcl, nrows, ncols, imfile
 
-def bnt2voxel(pcl,shape=64):
+def bnt2voxel(pcl,shape=64, center=True):
 	# compute ratio
 	maxs = pcl[:,:3].max(0)
 	mins = pcl[:,:3].min(0)
+	centers = (maxs + mins)/2
 	xmax, ymax, zmax = maxs
 	xmin, ymin, zmin = mins
-	raw_shape = [m-n+1 for m,n in zip(maxs,mins)]
-	shape = [shape]*3
-	voxel = np.zeros(shape)
-	ratio = [float(s)/v for (s,v) in zip(shape,raw_shape)]
+	xc, yc, zc = centers
+	raw_shape = maxs-mins
+	ratio =float(shape-1)/raw_shape
 	ratio_min = min(ratio)
 	ratio = [ratio_min,ratio_min,ratio_min]
+	voxel_shape = (1,)+(shape,)*3
+	voxel = np.zeros(voxel_shape)
 
 	# fill voxel
 	for i in range(pcl.shape[0]):
 		x,y,z,_,_ = pcl[i]
 		try:
-			xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
-			voxel[int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
+			if center:
+				xx,yy,zz = int(x)-xc,int(y)-yc,int(z)-zc
+				voxel[0,int(xx*ratio[0]+shape/2),int(yy*ratio[1]+shape/2),int(zz*ratio[2]+shape/2)] = 1
+			else:
+				xx,yy,zz = int(x)-xmin,int(y)-ymin,int(z)-zmin
+				voxel[0,int(xx*ratio[0]),int(yy*ratio[1]),int(zz*ratio[2])] = 1
 		except:
 			print( x,y,z )
 			print( int(x)-xmin,int(y)-ymin,int(z)-zmin )
