@@ -46,13 +46,14 @@ class Decoder( nn.Module ):
 	def __init__(self, Npcode, nOutputCh=4):
 		super(Decoder, self).__init__()
 		self.nOutputCh = nOutputCh
+		self.Npcode = Npcode
 
 		self.fc = nn.Sequential(
 			nn.Linear( 320+Npcode, 320 )
 		)
 
 		self.fconv = nn.Sequential(
-			nn.ConvTranspose3d(320, 512, 4, bias=False),
+			nn.ConvTranspose3d(320+Npcode, 512, 4, bias=False),
 			nn.BatchNorm3d(512),
 			nn.ReLU(),
 			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
@@ -68,6 +69,40 @@ class Decoder( nn.Module ):
 			nn.BatchNorm3d(32),
 			nn.ReLU(),
 			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
+			nn.Sigmoid(),
+		)
+	def forward(self, fx, y_pcode_onehot):
+		feature = torch.cat((fx, y_pcode_onehot),1)
+#		x = self.fc( feature )
+		x = self.fconv( feature.unsqueeze(2).unsqueeze(3).unsqueeze(4) )
+		return x
+
+class Decoder2D( nn.Module ):
+	def __init__(self, Npcode, nOutputCh=4):
+		super(Decoder, self).__init__()
+		self.nOutputCh = nOutputCh
+
+		self.fc = nn.Sequential(
+			nn.Linear( 320+Npcode, 320 )
+		)
+
+		self.fconv = nn.Sequential(
+			nn.ConvTranspose2d(320, 512, 4, bias=False),
+			nn.BatchNorm2d(512),
+			nn.ReLU(),
+			nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
+			nn.BatchNorm2d(256),
+			nn.ReLU(),
+			nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
+			nn.BatchNorm2d(128),
+			nn.ReLU(),
+			nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
+			nn.BatchNorm2d(64),
+			nn.ReLU(),
+			nn.ConvTranspose2d(64, 32, 4, 2, 1, bias=False),
+			nn.BatchNorm2d(32),
+			nn.ReLU(),
+			nn.ConvTranspose2d(32, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot):
