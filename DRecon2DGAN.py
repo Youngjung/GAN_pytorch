@@ -132,7 +132,7 @@ class Decoder( nn.Module ):
 
 class Decoder2D( nn.Module ):
 	def __init__(self, Npcode, nOutputCh=4):
-		super(Decoder, self).__init__()
+		super(Decoder2D, self).__init__()
 		self.nOutputCh = nOutputCh
 
 		self.fc = nn.Sequential(
@@ -161,7 +161,7 @@ class Decoder2D( nn.Module ):
 	def forward(self, fx, y_pcode_onehot):
 		feature = torch.cat((fx, y_pcode_onehot),1)
 		x = self.fc( feature )
-		x = self.fconv( x.unsqueeze(2).unsqueeze(3).unsqueeze(4) )
+		x = self.fconv( x.unsqueeze(2).unsqueeze(3) )
 		return x
 
 
@@ -170,7 +170,7 @@ class generator(nn.Module):
 		super(generator, self).__init__()
 
 		self.Genc = Encoder('Genc', Nid, Npcode)
-		self.Gdec = Decoder(Npcode, nOutputCh)
+		self.Gdec = Decoder2D(Npcode, nOutputCh)
 
 		utils.initialize_weights(self)
 
@@ -181,56 +181,58 @@ class generator(nn.Module):
 
 		return x_hat
 
-class discriminator(nn.Module):
+class discriminator2D(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, Nid=105, Npcode=48, nInputCh=4, norm=nn.BatchNorm3d):
-		super(discriminator, self).__init__()
+	def __init__(self, Nid=105, Npcode=48, nInputCh=4, norm=nn.BatchNorm2d):
+		super(discriminator2D, self).__init__()
 		self.nInputCh = nInputCh
 
 		self.conv = nn.Sequential(
-			nn.Conv3d(nInputCh, 32, 4, 2, 1, bias=False),
+			nn.Conv2d(nInputCh, 32, 4, 2, 1, bias=False), # 128 -> 64
 			norm(32),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
+			nn.Conv2d(32, 64, 4, 2, 1, bias=False), # 64 -> 32
 			norm(64),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(64, 128, 4, 2, 1, bias=False),
+			nn.Conv2d(64, 128, 4, 2, 1, bias=False), # 32 -> 16
 			norm(128),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(128, 256, 4, 2, 1, bias=False),
+			nn.Conv2d(128, 256, 4, 2, 1, bias=False), # 16 -> 8
 			norm(256),
 			nn.LeakyReLU(0.2),
-			nn.Conv3d(256, 512, 4, 2, 1, bias=False),
+			nn.Conv2d(256, 512, 4, 2, 1, bias=False), # 8 -> 4
 			norm(512),
 			nn.LeakyReLU(0.2)
 		)
 
 		self.convGAN = nn.Sequential(
-			nn.Conv3d(512, 1, 4, bias=False),
+			nn.Conv2d(512, 1, 4, bias=False),
 			nn.Sigmoid()
 		)
 
 		self.convID = nn.Sequential(
-			nn.Conv3d(512, Nid, 4, bias=False),
+			nn.Conv2d(512, Nid, 4, bias=False),
 		)
 
 		self.convPCode = nn.Sequential(
-			nn.Conv3d(512, Npcode, 4, bias=False),
+			nn.Conv2d(512, Npcode, 4, bias=False),
 		)
 		utils.initialize_weights(self)
 
 	def forward(self, input):
 		feature = self.conv(input)
 
-		fGAN = self.convGAN( feature ).squeeze(4).squeeze(3).squeeze(2)
-		fid = self.convID( feature ).squeeze(4).squeeze(3).squeeze(2)
-		fcode = self.convPCode( feature ).squeeze(4).squeeze(3).squeeze(2)
+		fGAN = self.convGAN( feature ).squeeze(3).squeeze(2)
+		fid = self.convID( feature ).squeeze(3).squeeze(2)
+		fcode = self.convPCode( feature ).squeeze(3).squeeze(2)
 
 		return fGAN, fid, fcode
 
-class DRecon3DGAN(object):
+class DRecon2DGAN(object):
 	def __init__(self, args):
+		print( 'init DRecon2DGAN...' )
+		t_start = time.time()
 		# parameters
 		self.epoch = args.epoch
 		self.sample_num = 49 
@@ -313,15 +315,15 @@ class DRecon3DGAN(object):
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
 											shape=128, image_shape=256, center=self.centerBosphorus,
-											use_colorPCL=False),
+											use_colorPCL=True),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 			self.Nz = 50
 
 		# networks init
-		self.G = generator(self.Nid, self.Npcode, nOutputCh=1)
-		self.D = discriminator(self.Nid, self.Npcode, nInputCh=1)
+		self.G = generator(self.Nid, self.Npcode, nOutputCh=3)
+		self.D = discriminator2D(self.Nid, self.Npcode, nInputCh=3)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
@@ -418,6 +420,7 @@ class DRecon3DGAN(object):
 #		utils.print_network(self.D)
 #		print('-----------------------------------------------')
 
+		print('init DRecon2DGAN done: {}sec'.format(time.time()-t_start) )
 
 	def train(self):
 		train_hist_keys = ['D_loss',
@@ -477,6 +480,7 @@ class DRecon3DGAN(object):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
+				projected, _ = torch.max( x3D_[:,1:,:,:,:], 4, keepdim=False)
 				y_random_pcode_ = torch.floor(torch.rand(self.batch_size)*self.Npcode).long()
 				y_random_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
 				y_random_pcode_onehot_.scatter_(1, y_random_pcode_.view(-1,1), 1)
@@ -487,6 +491,7 @@ class DRecon3DGAN(object):
 
 				if self.gpu_mode:
 					x2D_= Variable(x2D_.cuda())
+					projected = Variable(projected.cuda())
 					x3D_ = Variable(x3D_.cuda())
 					y_id_ = Variable( y_id_.cuda() )
 					y_pcode_ = Variable(y_pcode_.cuda())
@@ -495,6 +500,7 @@ class DRecon3DGAN(object):
 					y_random_pcode_onehot_ = Variable( y_random_pcode_onehot_.cuda() )
 				else:
 					x2D_= Variable(x2D_)
+					projected = Variable(projected)
 					x3D_ = Variable(x3D_)
 					y_id_ = Variable(y_id_)
 					y_pcode_ = Variable(y_pcode_)
@@ -506,7 +512,7 @@ class DRecon3DGAN(object):
 				for iD in range(self.n_critic) :
 					self.D_optimizer.zero_grad()
 	
-					D_GAN_real, D_id, D_pcode = self.D(x3D_)
+					D_GAN_real, D_id, D_pcode = self.D(projected)
 					if 'wass' in self.loss_option:
 						D_loss_GANreal = -torch.mean(D_GAN_real)
 					else:
@@ -514,8 +520,8 @@ class DRecon3DGAN(object):
 					D_loss_real_id = self.CE_loss(D_id, y_id_)
 					D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
 	
-					x3D_hat = self.G(x2D_, y_random_pcode_onehot_)
-					D_GAN_fake, _, _ = self.D(x3D_hat)
+					x2D_hat = self.G(x2D_, y_random_pcode_onehot_)
+					D_GAN_fake, _, _ = self.D(x2D_hat)
 					if 'wass' in self.loss_option:
 						D_loss_GANfake = torch.mean(D_GAN_fake)
 					else:
@@ -533,7 +539,7 @@ class DRecon3DGAN(object):
 							else:
 								alpha = torch.rand(x3D_.size())
 			
-							x_hat = Variable(alpha * x3D_.data + (1 - alpha) * x3D_hat.data, requires_grad=True)
+							x_hat = Variable(alpha * x3D_.data + (1 - alpha) * x2D_hat.data, requires_grad=True)
 			
 							pred_hat, _, _ = self.D(x_hat)
 							if self.gpu_mode:
@@ -595,18 +601,18 @@ class DRecon3DGAN(object):
 				for iG in range( self.n_gen ):
 					self.G_optimizer.zero_grad()
 		
-					x3D_hat = self.G(x2D_, y_pcode_onehot_)
-					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
+					x2D_hat = self.G(x2D_, y_pcode_onehot_)
+					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x2D_hat)
 					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
 					G_loss_id = self.CE_loss(D_fake_id, y_id_)
 					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
 	
 					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
 					if 'recon' in self.loss_option:
-						G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
+						G_loss_recon = self.MSE_loss(x2D_hat, x3D_)
 						G_loss += G_loss_recon
 					elif 'reconL1' in self.loss_option:
-						G_loss_recon = self.L1_loss(x3D_hat, x3D_)
+						G_loss_recon = self.L1_loss(x2D_hat, x3D_)
 						G_loss += G_loss_recon
 	
 					if 'dist' in self.loss_option:
@@ -614,7 +620,7 @@ class DRecon3DGAN(object):
 						sumB = 0
 						for iA in range(self.batch_size):
 							dist_2D = x2D_[iA]-x2D_ + eps
-							dist_3D = x3D_hat[iA]-x3D_hat + eps
+							dist_3D = x2D_hat[iA]-x2D_hat + eps
 							normdist_2D = torch.norm(dist_2D.view(self.batch_size,-1),1, dim=1)
 							normdist_3D = torch.norm(dist_3D.view(self.batch_size,-1),1, dim=1)
 							sumA += normdist_2D
@@ -670,7 +676,7 @@ class DRecon3DGAN(object):
 			if epoch==0 or (epoch+1)%5 == 0:
 #				self.dump_x_hat((epoch+1))
 				fname = self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.npy'
-				x3D_hat.cpu().data.numpy().squeeze().dump(fname)
+				x2D_hat.cpu().data.numpy().squeeze().dump(fname)
 			self.save()
 			utils.loss_plot(self.train_hist,
 							os.path.join(self.save_dir, self.dataset, self.model_name),
