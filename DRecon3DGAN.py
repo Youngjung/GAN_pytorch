@@ -132,7 +132,7 @@ class Decoder( nn.Module ):
 
 class Decoder2D( nn.Module ):
 	def __init__(self, Npcode, nOutputCh=4):
-		super(Decoder, self).__init__()
+		super(Decoder2D, self).__init__()
 		self.nOutputCh = nOutputCh
 
 		self.fc = nn.Sequential(
@@ -161,9 +161,8 @@ class Decoder2D( nn.Module ):
 	def forward(self, fx, y_pcode_onehot):
 		feature = torch.cat((fx, y_pcode_onehot),1)
 		x = self.fc( feature )
-		x = self.fconv( x.unsqueeze(2).unsqueeze(3).unsqueeze(4) )
+		x = self.fconv( x.unsqueeze(2).unsqueeze(3) )
 		return x
-
 
 class generator(nn.Module):
 	def __init__(self, Nid, Npcode, nOutputCh=4):
