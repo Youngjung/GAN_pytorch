@@ -331,7 +331,7 @@ class DRecon2DGAN(object):
 			return
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
-		if args.interpolate or args.generate:
+		if args.interpolate: # or args.generate:
 			print( 'skipping fixed sample : interpolate/generate' )
 		elif not os.path.exists( path_sample ):
 			print( 'Generating fixed sample for visualization...' )
@@ -393,7 +393,7 @@ class DRecon2DGAN(object):
 			with open( fname ) as fhandle:
 				self.sample_pcode_ = torch.Tensor( pickle.load( fhandle ))
 
-		if not args.interpolate and not args.generate:
+		if not args.interpolate: # and not args.generate:
 			if self.gpu_mode:
 				self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
 				self.sample_pcode_ = Variable(self.sample_pcode_.cuda(), volatile=True)
@@ -693,7 +693,7 @@ class DRecon2DGAN(object):
 						self.model_name, use_subplot=True)
 
 
-	def dump_x_hat(self, epoch, fix=True):
+	def dump_fixed_x_hat(self, epoch, fix=True):
 		print( 'dump x_hat...' )
 		self.G.eval()
 
@@ -717,6 +717,7 @@ class DRecon2DGAN(object):
 		return next(dataIter)
 
 	def visualize_results(self,a=None,b=None):
+		self.dump_fixed_x_hat(300)
 		print( 'visualizing result...' )
 		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate') 
 		if not os.path.exists(save_dir):

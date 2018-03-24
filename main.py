@@ -198,7 +198,7 @@ def main():
 
 	# visualize learned generator
 	if opts.generate:
-		gan.visualize_results( opts.epoch, opts.fix_z )
+		gan.visualize_results( opts.epoch )
 	if opts.interpolate:
 		if opts.interpolate == 'z':
 			gan.interpolate_z( opts )
