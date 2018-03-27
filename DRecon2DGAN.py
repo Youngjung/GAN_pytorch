@@ -327,8 +327,6 @@ class DRecon2DGAN(object):
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
-		if hasattr(args, 'comment1'):
-			return
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
 		if args.interpolate: # or args.generate:
