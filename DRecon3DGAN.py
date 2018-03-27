@@ -42,97 +42,39 @@ class Encoder( nn.Module ):
 		x = self.conv( input )
 		return x
 
-class Decoder( nn.Module ):
+class Decoder3d( nn.Module ):
 	def __init__(self, Npcode, nOutputCh=4):
-		super(Decoder, self).__init__()
+		super(Decoder3d, self).__init__()
 		self.nOutputCh = nOutputCh
 		self.Npcode = Npcode
 
 		self.deconv = nn.Sequential(
-			# 4
-			nn.Conv3d(320+Npcode, 512, 4,1,3, bias=False),
+			nn.ConvTranspose3d(320+Npcode, 512, 4, bias=False),
 			nn.BatchNorm3d(512),
-			nn.LeakyReLU(0.2),
-			#nn.Conv3d(512, 512, 3,1,1, bias=False),
-			#nn.BatchNorm3d(512),
-			#nn.LeakyReLU(0.2),
-
-			# 8
-			nn.Upsample(scale_factor=2, mode='nearest'),
-			nn.Conv3d(512, 256, 3,1,1, bias=False),
+			nn.ReLU(),
+			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(256),
-			nn.LeakyReLU(0.2),
-			#nn.Conv3d(256, 256, 3,1,1, bias=False),
-			#nn.BatchNorm3d(256),
-			#nn.LeakyReLU(0.2),
-
-			# 16
-			nn.Upsample(scale_factor=2, mode='nearest'),
-			nn.Conv3d(256, 128, 3,1,1, bias=False),
+			nn.ReLU(),
+			nn.ConvTranspose3d(256, 128, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(128),
-			nn.LeakyReLU(0.2),
-			#nn.Conv3d(128, 128, 3,1,1, bias=False),
-			#nn.BatchNorm3d(128),
-			#nn.LeakyReLU(0.2),
-
-			# 32
-			nn.Upsample(scale_factor=2, mode='nearest'),
-			nn.Conv3d(128, 64, 3,1,1, bias=False),
+			nn.ReLU(),
+			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(64),
-			nn.LeakyReLU(0.2),
-			#nn.Conv3d(64, 64, 3,1,1, bias=False),
-			#nn.BatchNorm3d(64),
-			#nn.LeakyReLU(0.2),
-
-			# 64 
-			nn.Upsample(scale_factor=2, mode='nearest'),
-			nn.Conv3d(64, 32, 3,1,1, bias=False),
+			nn.ReLU(),
+			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
-			nn.LeakyReLU(0.2),
-			#nn.Conv3d(32, 32, 3,1,1, bias=False),
-			#nn.BatchNorm3d(32),
-			#nn.LeakyReLU(0.2),
-
-			# 128
-			nn.Upsample(scale_factor=2, mode='nearest'),
-			nn.Conv3d(32, 16, 3,1,1, bias=False),
-			nn.BatchNorm3d(16),
-			nn.LeakyReLU(0.2),
-			#nn.Conv3d(16, 16, 3,1,1, bias=False),
-			#nn.BatchNorm3d(16),
-			#nn.LeakyReLU(0.2),
-
-			# last layer
-			nn.Conv3d(16, nOutputCh, 1,1,0, bias=False),
+			nn.ReLU(),
+			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
-
-#			nn.ConvTranspose3d(320+Npcode, 512, 4, bias=False),
-#			nn.BatchNorm3d(512),
-#			nn.ReLU(),
-#			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
-#			nn.BatchNorm3d(256),
-#			nn.ReLU(),
-#			nn.ConvTranspose3d(256, 128, 4, 2, 1, bias=False),
-#			nn.BatchNorm3d(128),
-#			nn.ReLU(),
-#			nn.ConvTranspose3d(128, 64, 4, 2, 1, bias=False),
-#			nn.BatchNorm3d(64),
-#			nn.ReLU(),
-#			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
-#			nn.BatchNorm3d(32),
-#			nn.ReLU(),
-#			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
-#			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot):
 		feature = torch.cat((fx, y_pcode_onehot),1)
-#		x = self.fc( feature )
 		x = self.deconv( feature.unsqueeze(2).unsqueeze(3).unsqueeze(4) )
 		return x
 
-class Decoder2D( nn.Module ):
+class Decoder2d( nn.Module ):
 	def __init__(self, Npcode, nOutputCh=4):
-		super(Decoder2D, self).__init__()
+		super(Decoder2d, self).__init__()
 		self.nOutputCh = nOutputCh
 
 		self.fc = nn.Sequential(
@@ -160,31 +102,81 @@ class Decoder2D( nn.Module ):
 		)
 	def forward(self, fx, y_pcode_onehot):
 		feature = torch.cat((fx, y_pcode_onehot),1)
-		x = self.fc( feature )
-		x = self.fconv( x.unsqueeze(2).unsqueeze(3) )
+		#x = self.fc( feature )
+		x = self.fconv( feature.unsqueeze(2).unsqueeze(3) )
 		return x
 
-class generator(nn.Module):
+class generator2d3d(nn.Module):
 	def __init__(self, Nid, Npcode, nOutputCh=4):
-		super(generator, self).__init__()
+		super(generator2d3d, self).__init__()
 
 		self.Genc = Encoder('Genc', Nid, Npcode)
-		self.Gdec = Decoder(Npcode, nOutputCh)
+		self.Gdec2d = Decoder2d(Npcode, nOutputCh['2d'])
+#		self.Gdec3d = Decoder3d(Npcode, nOutputCh['3d'])
 
 		utils.initialize_weights(self)
 
 	def forward(self, x_, y_pcode_onehot_):
 		fx = self.Genc( x_ )
 		fx = fx.view(-1,320)
-		x_hat = self.Gdec(fx, y_pcode_onehot_)
+		xhat2d = self.Gdec2d(fx, y_pcode_onehot_)
+#		xhat3d = self.Gdec3d(fx, y_pcode_onehot_)
 
-		return x_hat
+		return xhat2d, None #xhat3d
 
-class discriminator(nn.Module):
+class discriminator2d(nn.Module):
+	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
+	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
+	def __init__(self, Nid=105, Npcode=48, nInputCh=4, norm=nn.BatchNorm2d):
+		super(discriminator2d, self).__init__()
+		self.nInputCh = nInputCh
+
+		self.conv = nn.Sequential(
+			nn.Conv2d(nInputCh, 32, 4, 2, 1, bias=False), # 128 -> 64
+			norm(32),
+			nn.LeakyReLU(0.2),
+			nn.Conv2d(32, 64, 4, 2, 1, bias=False), # 64 -> 32
+			norm(64),
+			nn.LeakyReLU(0.2),
+			nn.Conv2d(64, 128, 4, 2, 1, bias=False), # 32 -> 16
+			norm(128),
+			nn.LeakyReLU(0.2),
+			nn.Conv2d(128, 256, 4, 2, 1, bias=False), # 16 -> 8
+			norm(256),
+			nn.LeakyReLU(0.2),
+			nn.Conv2d(256, 512, 4, 2, 1, bias=False), # 8 -> 4
+			norm(512),
+			nn.LeakyReLU(0.2)
+		)
+
+		self.convGAN = nn.Sequential(
+			nn.Conv2d(512, 1, 4, bias=False),
+			nn.Sigmoid()
+		)
+
+		self.convID = nn.Sequential(
+			nn.Conv2d(512, Nid, 4, bias=False),
+		)
+
+		self.convPCode = nn.Sequential(
+			nn.Conv2d(512, Npcode, 4, bias=False),
+		)
+		utils.initialize_weights(self)
+
+	def forward(self, input):
+		feature = self.conv(input)
+
+		fGAN = self.convGAN( feature ).squeeze(3).squeeze(2)
+		fid = self.convID( feature ).squeeze(3).squeeze(2)
+		fcode = self.convPCode( feature ).squeeze(3).squeeze(2)
+
+		return fGAN, fid, fcode
+
+class discriminator3d(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
 	def __init__(self, Nid=105, Npcode=48, nInputCh=4, norm=nn.BatchNorm3d):
-		super(discriminator, self).__init__()
+		super(discriminator3d, self).__init__()
 		self.nInputCh = nInputCh
 
 		self.conv = nn.Sequential(
@@ -312,20 +304,20 @@ class DRecon3DGAN(object):
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
 											shape=128, image_shape=256, center=self.centerBosphorus,
-											use_colorPCL=False),
+											use_colorPCL=True),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
 			self.Nz = 50
 
 		# networks init
-		self.G = generator(self.Nid, self.Npcode, nOutputCh=1)
-		self.D = discriminator(self.Nid, self.Npcode, nInputCh=1)
+		self.G = generator2d3d(self.Nid, self.Npcode, nOutputCh={'2d':3,'3d':1})
+		self.D2d = discriminator2d(self.Nid, self.Npcode, nInputCh=3)
+		self.D3d = discriminator3d(self.Nid, self.Npcode, nInputCh=1)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
-		self.D_optimizer = optim.Adam(self.D.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
+		self.D2d_optimizer = optim.Adam(self.D2d.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
+		self.D3d_optimizer = optim.Adam(self.D3d.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
-		if hasattr(args, 'comment1'):
-			return
 		# fixed samples for reconstruction visualization
 		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
 		if args.interpolate or args.generate:
@@ -401,7 +393,8 @@ class DRecon3DGAN(object):
 
 		if self.gpu_mode:
 			self.G.cuda()
-			self.D.cuda()
+			self.D2d.cuda()
+			self.D3d.cuda()
 			self.CE_loss = nn.CrossEntropyLoss().cuda()
 			self.BCE_loss = nn.BCELoss().cuda()
 			self.MSE_loss = nn.MSELoss().cuda()
@@ -419,17 +412,11 @@ class DRecon3DGAN(object):
 
 
 	def train(self):
-		train_hist_keys = ['D_loss',
-                           'D_loss_GAN_real',
-                           'D_loss_id',
-                           'D_loss_pcode',
-                           'D_loss_GAN_fake',
-                           'D_acc',
+		train_hist_keys = ['D2d_loss',
+                           'D3d_loss',
+                           'D2d_acc',
+                           'D3d_acc',
                            'G_loss',
-                           'G_loss',
-                           'G_loss_GAN_fake',
-                           'G_loss_id',
-                           'G_loss_pcode',
                            'per_epoch_time',
                            'total_time']
 		if 'recon' in self.loss_option:
@@ -464,7 +451,8 @@ class DRecon3DGAN(object):
 		normalizerB = self.data_loader.dataset.muB/self.data_loader.dataset.stddevB # normalization
 		eps = 1e-16
 
-		self.D.train()
+		self.D2d.train()
+		self.D3d.train()
 		start_time = time.time()
 		print('training start from epoch {}!!'.format(self.epoch_start+1))
 		for epoch in range(self.epoch_start, self.epoch):
@@ -476,6 +464,8 @@ class DRecon3DGAN(object):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
+				projected, _ = torch.max( x3D_[:,1:,:,:,:], 4, keepdim=False)
+				x3D_ = x3D_[:,0:1,:,:,:]
 				y_random_pcode_ = torch.floor(torch.rand(self.batch_size)*self.Npcode).long()
 				y_random_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
 				y_random_pcode_onehot_.scatter_(1, y_random_pcode_.view(-1,1), 1)
@@ -487,6 +477,7 @@ class DRecon3DGAN(object):
 				if self.gpu_mode:
 					x2D_= Variable(x2D_.cuda())
 					x3D_ = Variable(x3D_.cuda())
+					projected = Variable(projected.cuda())
 					y_id_ = Variable( y_id_.cuda() )
 					y_pcode_ = Variable(y_pcode_.cuda())
 					y_pcode_onehot_ = Variable( y_pcode_onehot_.cuda() )
@@ -495,6 +486,7 @@ class DRecon3DGAN(object):
 				else:
 					x2D_= Variable(x2D_)
 					x3D_ = Variable(x3D_)
+					projected = Variable(projected)
 					y_id_ = Variable(y_id_)
 					y_pcode_ = Variable(y_pcode_)
 					y_pcode_onehot_ = Variable( y_pcode_onehot_ )
@@ -503,173 +495,86 @@ class DRecon3DGAN(object):
 
 				# update D network
 				for iD in range(self.n_critic) :
-					self.D_optimizer.zero_grad()
+					self.D2d_optimizer.zero_grad()
+					self.D3d_optimizer.zero_grad()
 	
-					D_GAN_real, D_id, D_pcode = self.D(x3D_)
-					if 'wass' in self.loss_option:
-						D_loss_GANreal = -torch.mean(D_GAN_real)
-					else:
-						D_loss_GANreal = self.BCE_loss(D_GAN_real, self.y_real_)
-					D_loss_real_id = self.CE_loss(D_id, y_id_)
-					D_loss_real_pcode = self.CE_loss(D_pcode, y_pcode_)
-	
-					x3D_hat = self.G(x2D_, y_random_pcode_onehot_)
-					D_GAN_fake, _, _ = self.D(x3D_hat)
-					if 'wass' in self.loss_option:
-						D_loss_GANfake = torch.mean(D_GAN_fake)
-					else:
-						D_loss_GANfake = self.BCE_loss(D_GAN_fake, self.y_fake_)
-	
-					num_correct_real = torch.sum(D_GAN_real>0.5)
-					num_correct_fake = torch.sum(D_GAN_fake<0.5)
-					D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
-	
-					if 'GP' in self.loss_option:
-						if 'wass' in self.loss_option:
-							# gradient penalty from WGAN_GP.py
-							if self.gpu_mode:
-								alpha = torch.rand(x3D_.size()).cuda()
-							else:
-								alpha = torch.rand(x3D_.size())
-			
-							x_hat = Variable(alpha * x3D_.data + (1 - alpha) * x3D_hat.data, requires_grad=True)
-			
-							pred_hat, _, _ = self.D(x_hat)
-							if self.gpu_mode:
-								gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
-											 create_graph=True, retain_graph=True, only_inputs=True)[0]
-							else:
-								gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
-												 create_graph=True, retain_graph=True, only_inputs=True)[0]
-			
-							gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
+					d_gan2d, d_id2d, d_expr2d = self.D2d(projected)
+					loss_d_real_gan2d = self.BCE_loss(d_gan2d, self.y_real_)
+					loss_d_real_id2d = self.CE_loss(d_id2d, y_id_)
+					loss_d_real_expr2d = self.CE_loss(d_expr2d, y_pcode_)
 
-
-						else:
-							# DRAGAN Loss (Gradient penalty)
-							if self.gpu_mode:
-								alpha = torch.rand(x2D_.size()).cuda()
-								x2D_hat = Variable(alpha*x2D_.data +
-													(1-alpha)*(x2D_.data+0.5*x2D_.data.std()*torch.rand(x2D_.size()).cuda()),
-													requires_grad=True)
-							else:
-								alpha = torch.rand(x2D_.size())
-								x2D_hat = Variable(alpha*x2D_.data +
-													(1-alpha)*(x2D_.data+0.5*x2D_.data.std()*torch.rand(x2D_.size())),
-													requires_grad=True)
-							pred_hat,_,_,_ = self.D(x2D_hat)
-							if self.gpu_mode:
-								gradients = grad(outputs=pred_hat, inputs=x2D_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
-													create_graph=True, retain_graph=True, only_inputs=True)[0]
-							else:
-								gradients = grad(outputs=pred_hat, inputs=x2D_hat, grad_outputs=torch.ones(pred_hat.size()),
-													create_graph=True, retain_graph=True, only_inputs=True)[0]
-			
-							gradient_penalty = self.lambda_ * ((gradients.view(gradients.size(0),-1).norm(2,1)-1)**2).mean()
-		
-						D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake + gradient_penalty
-					else:
-						D_loss = D_loss_GANreal + D_loss_real_id + D_loss_real_pcode + D_loss_GANfake
+#					d_gan3d, d_id3d, d_expr3d = self.D3d(x3D_)
+#					loss_d_real_gan3d = self.BCE_loss(d_gan3d, self.y_real_)
+#					loss_d_real_id3d = self.CE_loss(d_id3d, y_id_)
+#					loss_d_real_expr3d = self.CE_loss(d_expr3d, y_pcode_)
+	
+					xhat2d, xhat3d = self.G(x2D_, y_random_pcode_onehot_)
+					d_fake_gan2d, _, _ = self.D2d( xhat2d )
+#					d_fake_gan3d, _, _ = self.D3d( xhat3d )
+					loss_d_fake_gan2d = self.BCE_loss(d_fake_gan2d, self.y_fake_)
+#					loss_d_fake_gan3d = self.BCE_loss(d_fake_gan3d, self.y_fake_)
+	
+					num_correct_real2d = torch.sum(d_gan2d>0.5)
+					num_correct_fake2d = torch.sum(d_fake_gan2d<0.5)
+					D2d_acc = float(num_correct_real2d.data[0] + num_correct_fake2d.data[0]) / (self.batch_size*2)
+#					num_correct_real3d = torch.sum(d_gan3d>0.5)
+#					num_correct_fake3d = torch.sum(d_fake_gan3d<0.5)
+#					D3d_acc = float(num_correct_real3d.data[0] + num_correct_fake3d.data[0]) / (self.batch_size*2)
+	
+					D2d_loss = loss_d_real_gan2d + loss_d_real_id2d + loss_d_real_expr2d + loss_d_fake_gan2d
+#					D3d_loss = loss_d_real_gan3d + loss_d_real_id3d + loss_d_real_expr3d + loss_d_fake_gan3d
 
 					if iD == 0:	
-						self.train_hist['D_loss'].append(D_loss.data[0])
-						self.train_hist['D_loss_GAN_real'].append(D_loss_GANreal.data[0])
-						self.train_hist['D_loss_id'].append(D_loss_real_id.data[0])
-						self.train_hist['D_loss_pcode'].append(D_loss_real_pcode.data[0])
-						self.train_hist['D_loss_GAN_fake'].append(D_loss_GANfake.data[0])
-						self.train_hist['D_acc'].append(D_acc)
+						self.train_hist['D2d_loss'].append(D2d_loss.data[0])
+#						self.train_hist['D3d_loss'].append(D3d_loss.data[0])
+						self.train_hist['D2d_acc'].append(D2d_acc)
+#						self.train_hist['D3d_acc'].append(D3d_acc)
 	
-					divisor = min( len(self.train_hist['D_acc']), self.nDaccAvg )
-					D_acc_avg = sum( self.train_hist['D_acc'][-self.nDaccAvg:] )/divisor
-					D_loss.backward()
-					if D_acc_avg < 0.8:
-						self.D_optimizer.step()
+					D2d_loss.backward()#retain_graph=True)
+#					D3d_loss.backward()
+					if D2d_acc < 0.8:
+						self.D2d_optimizer.step()
+#					if D3d_acc < 0.8:
+#						self.D3d_optimizer.step()
 
-					if 'wass' in self.loss_option and 'GP' not in self.loss_option:
-						for p in self.D.parameters():
-							p.data.clamp_(-self.c, self.c)
-
-	
 				# update G network
 				for iG in range( self.n_gen ):
 					self.G_optimizer.zero_grad()
 		
-					x3D_hat = self.G(x2D_, y_pcode_onehot_)
-					D_fake_GAN, D_fake_id, D_fake_pcode = self.D(x3D_hat)
-					G_loss_GANfake = self.BCE_loss(D_fake_GAN, self.y_real_)
-					G_loss_id = self.CE_loss(D_fake_id, y_id_)
-					G_loss_pcode = self.CE_loss(D_fake_pcode, y_pcode_)
-	
-					G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
-					if 'recon' in self.loss_option:
-						G_loss_recon = self.MSE_loss(x3D_hat, x3D_)
-						G_loss += G_loss_recon
-					elif 'reconL1' in self.loss_option:
-						G_loss_recon = self.L1_loss(x3D_hat, x3D_)
-						G_loss += G_loss_recon
-	
-					if 'dist' in self.loss_option:
-						sumA = 0
-						sumB = 0
-						for iA in range(self.batch_size):
-							dist_2D = x2D_[iA]-x2D_ + eps
-							dist_3D = x3D_hat[iA]-x3D_hat + eps
-							normdist_2D = torch.norm(dist_2D.view(self.batch_size,-1),1, dim=1)
-							normdist_3D = torch.norm(dist_3D.view(self.batch_size,-1),1, dim=1)
-							sumA += normdist_2D
-							sumB += normdist_3D
-		
-						sumA /= self.data_loader.dataset.stddevA # normalization
-						sumB /= self.data_loader.dataset.stddevB # normalization
-						sumA /= nPairs # expectation
-						sumB /= nPairs # expectation
-		
-						G_loss_distance = torch.abs( torch.sum( sumA - sumB - normalizerA + normalizerB )) / self.batch_size
-						G_loss += G_loss_distance
-	
+					xhat2d, xhat3d = self.G(x2D_, y_pcode_onehot_)
+
+					d_gan2d, d_id2d, d_expr2d = self.D2d(xhat2d)
+					loss_g_gan2d = self.BCE_loss(d_gan2d, self.y_real_)
+					loss_g_id2d = self.CE_loss(d_id2d, y_id_)
+					loss_g_expr2d = self.CE_loss(d_expr2d, y_pcode_)
+
+#					d_gan3d, d_id3d, d_expr3d = self.D3d(xhat3d)
+#					loss_g_gan3d = self.BCE_loss(d_gan3d, self.y_real_)
+#					loss_g_id3d = self.CE_loss(d_id3d, y_id_)
+#					loss_g_expr3d = self.CE_loss(d_expr3d, y_pcode_)
+
+					G_loss = loss_g_gan2d + loss_g_id2d + loss_g_expr2d # + \
+#								loss_g_gan3d + loss_g_id3d + loss_g_expr3d
 	
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
-						self.train_hist['G_loss_GAN_fake'].append(G_loss_GANfake.data[0])
-						self.train_hist['G_loss_id'].append(G_loss_id.data[0])
-						self.train_hist['G_loss_pcode'].append(G_loss_pcode.data[0])
-						if 'recon' in self.loss_option or 'reconL1' in self.loss_option:
-							self.train_hist['G_loss_recon'].append(G_loss_recon.data[0])
-						if 'dist' in self.loss_option:
-							self.train_hist['G_loss_dist'].append(G_loss_distance.data[0])
 		
 					G_loss.backward()
 					self.G_optimizer.step()
 					
-					if 'recon' in self.loss_option and 'dist' in self.loss_option:
-						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon + G_loss_distance
-					elif 'recon' in self.loss_option :
-						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_recon
-					elif 'dist' in self.loss_option:
-						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode + G_loss_distance
-					else:
-						G_loss = G_loss_GANfake + G_loss_id + G_loss_pcode
-						
-
-	
 				if ((iB + 1) % 10) == 0:
 					secs = time.time()-start_time_epoch
 					hours = secs//3600
 					mins = secs/60%60
-					#print("%2dh%2dm E:[%2d] B:[%4d/%4d] D: %.4f=%.4f+%.4f+%.4f+%.4f,\n\t\t\t G: %.4f=%.4f+%.4f+%.4f" %
-					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f,G: %.4f, D_acc:%.4f/%.4f" %
+					#print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f/%.4f, G: %.4f, D_acc:%.4f/%.4f" %
+					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f, G: %.4f, D_acc:%.4f"% 
 						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size, 
-						  D_loss.data[0], G_loss.data[0], D_acc, D_acc_avg) )
-#						  D_loss.data[0], D_loss_GANreal.data[0], D_loss_real_id.data[0],
-#						  D_loss_real_pcode.data[0], D_loss_GANfake.data[0],
-#						  G_loss.data[0], G_loss_GANfake.data[0], G_loss_id.data[0],
-#						  G_loss_pcode.data[0]) )
+						  D2d_loss.data[0], #D3d_loss.data[0],
+						  G_loss.data[0], D2d_acc) )#, D3d_acc) )
 				
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			if epoch==0 or (epoch+1)%5 == 0:
-#				self.dump_x_hat((epoch+1))
-				fname = self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.npy'
-				x3D_hat.cpu().data.numpy().squeeze().dump(fname)
+				self.dump_x_hat(xhat2d, xhat3d, epoch+1)
 			self.save()
 			utils.loss_plot(self.train_hist,
 							os.path.join(self.save_dir, self.dataset, self.model_name),
@@ -686,24 +591,24 @@ class DRecon3DGAN(object):
 						self.model_name, use_subplot=True)
 
 
-	def dump_x_hat(self, epoch, fix=True):
+	def dump_x_hat(self, xhat2d, xhat3d, epoch):
 		print( 'dump x_hat...' )
-		self.G.eval()
 
-		if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
-			os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
-
-		if fix:
-			""" fixed noise """
-			samples = self.G(self.sample_x2D_, self.sample_pcode_)
+		save_dir = os.path.join( self.result_dir, self.dataset, self.model_name )
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
 
 		if self.gpu_mode:
-			samples = samples.cpu().data.numpy().squeeze()
+			xhat2d = xhat2d.cpu().data.numpy().squeeze()
+		#	xhat3d = xhat3d.cpu().data.numpy().squeeze()
 		else:
-			samples = samples.data.numpy().squeeze()
+			xhat2d = xhat2d.data.numpy().squeeze()
+			xhat3d = xhat3d.data.numpy().squeeze()
 
-		fname = self.result_dir + '/' + self.dataset + '/' + self.model_name + '/' + self.model_name + '_epoch%03d' % epoch + '.npy'
-		samples.dump(fname)
+		fname = os.path.join( save_dir , self.model_name + '_xhat2d_epoch%03d' % epoch + '.npy' )
+		xhat2d.dump(fname)
+		#fname = os.path.join( save_dir , self.model_name + '_xhat3d_epoch%03d' % epoch + '.npy' )
+		#xhat3d.dump(fname)
 
 	def get_image_batch(self):
 		dataIter = iter(self.data_loader)
@@ -777,7 +682,8 @@ class DRecon3DGAN(object):
 			os.makedirs(save_dir)
 
 		torch.save(self.G.state_dict(), os.path.join(save_dir, self.model_name + '_G.pkl'))
-		torch.save(self.D.state_dict(), os.path.join(save_dir, self.model_name + '_D.pkl'))
+		torch.save(self.D2d.state_dict(), os.path.join(save_dir, self.model_name + '_D2d.pkl'))
+		torch.save(self.D3d.state_dict(), os.path.join(save_dir, self.model_name + '_D3d.pkl'))
 
 		with open(os.path.join(save_dir, self.model_name + '_history.pkl'), 'wb') as f:
 			pickle.dump(self.train_hist, f)
@@ -786,7 +692,8 @@ class DRecon3DGAN(object):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 
 		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
-		self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
+		self.D2d.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D2d.pkl')))
+		self.D3d.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D3d.pkl')))
 
 		try:
 			with open(os.path.join(save_dir, self.model_name + '_history.pkl')) as fhandle:
