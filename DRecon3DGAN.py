@@ -102,8 +102,8 @@ class Decoder2d( nn.Module ):
 		)
 	def forward(self, fx, y_pcode_onehot):
 		feature = torch.cat((fx, y_pcode_onehot),1)
-		#x = self.fc( feature )
-		x = self.fconv( feature.unsqueeze(2).unsqueeze(3) )
+		x = self.fc( feature )
+		x = self.fconv( x.unsqueeze(2).unsqueeze(3) )
 		return x
 
 class generator2d3d(nn.Module):
@@ -600,15 +600,15 @@ class DRecon3DGAN(object):
 
 		if self.gpu_mode:
 			xhat2d = xhat2d.cpu().data.numpy().squeeze()
-		#	xhat3d = xhat3d.cpu().data.numpy().squeeze()
+#			xhat3d = xhat3d.cpu().data.numpy().squeeze()
 		else:
 			xhat2d = xhat2d.data.numpy().squeeze()
-			xhat3d = xhat3d.data.numpy().squeeze()
+#			xhat3d = xhat3d.data.numpy().squeeze()
 
 		fname = os.path.join( save_dir , self.model_name + '_xhat2d_epoch%03d' % epoch + '.npy' )
 		xhat2d.dump(fname)
-		#fname = os.path.join( save_dir , self.model_name + '_xhat3d_epoch%03d' % epoch + '.npy' )
-		#xhat3d.dump(fname)
+#		fname = os.path.join( save_dir , self.model_name + '_xhat3d_epoch%03d' % epoch + '.npy' )
+#		xhat3d.dump(fname)
 
 	def get_image_batch(self):
 		dataIter = iter(self.data_loader)
