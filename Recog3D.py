@@ -45,10 +45,10 @@ class discriminator(nn.Module):
 	def forward(self, input):
 		feature = self.conv(input)
 
-		#fid = self.convID( feature ).squeeze(4).squeeze(3).squeeze(2)
+		fid = self.convID( feature ).squeeze(4).squeeze(3).squeeze(2)
 		fcode = self.convPCode( feature ).squeeze(4).squeeze(3).squeeze(2)
 
-		return fcode#fid, fcode
+		return fid, fcode
 
 
 class Recog3D(object):
@@ -61,9 +61,9 @@ class Recog3D(object):
 		self.result_dir = args.result_dir
 		self.dataset = args.dataset
 		self.dataroot_dir = args.dataroot_dir
+		self.centerBosphorus = args.centerBosphorus
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
-		self.use_GP = args.use_GP
 		self.model_name = args.gan_type
 		self.num_workers = args.num_workers
 		if len(args.comment) > 0:
@@ -80,9 +80,10 @@ class Recog3D(object):
 			self.data_loader = DataLoader( utils.ShapeNet(data_dir,synsetId=args.synsetId),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 		elif self.dataset == 'Bosphorus':
-			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, skipCodes=['YR','PR','CR'],
+			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
-											shape=(128,128,128)),
+											shape=128, image_shape=256, center=self.centerBosphorus,
+											use_colorPCL=True),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
@@ -93,10 +94,8 @@ class Recog3D(object):
 		else:
 			exit("unknown dataset: " + self.dataset)
 
-		self.z_dim = 200
-
 		for iB, (sample_x_, sample_y_, sample_image_) in enumerate(self.data_loader):
-			self.sample_x_ = sample_x_
+			self.sample_x_ = sample_x_[:,0:1,:,:,:]
 			self.sample_image_ = sample_image_
 			self.sample_y_id_ = sample_y_['id']
 			self.sample_y_pcode_ = sample_y_['pcode']
@@ -126,14 +125,9 @@ class Recog3D(object):
 			self.sample_y_id_ = Variable( self.sample_y_id_.cuda(), volatile=True )
 			self.sample_y_pcode_ = Variable( self.sample_y_pcode_.cuda(), volatile=True )
 			self.sample_y_pcode_onehot_ = Variable( self.sample_y_pcode_onehot_.cuda(), volatile=True )
-			self.sample_z_ = Variable( 
-						torch.normal(torch.zeros(self.test_sample_size, self.z_dim),
-									 torch.ones(self.test_sample_size,self.z_dim)*0.33).cuda(),
-						volatile=True)
 		else:
 			self.sample_x_ = Variable( self.sample_x_, volatile=True )
 			self.sample_image_ = Variable( self.sample_image_, volatile=True )
-			self.sample_z_ = Variable(torch.rand((self.batch_size, self.z_dim)), volatile=True)
 			self.sample_y_id_ = Variable( self.sample_y_id_, volatile=True )
 			self.sample_y_pcode_ = Variable( self.sample_y_pcode_, volatile=True )
 			self.sample_y_pcode_onehot_ = Variable( self.sample_y_pcode_onehot_, volatile=True )
@@ -158,7 +152,10 @@ class Recog3D(object):
 		if not hasattr(self, 'train_hist') :
 			self.train_hist = {}
 			self.train_hist['D_loss'] = []
-			self.train_hist['D_acc'] = []
+			self.train_hist['D_loss_id'] = []
+			self.train_hist['D_loss_pcode'] = []
+			self.train_hist['D_acc_id'] = []
+			self.train_hist['D_acc_pcode'] = []
 			self.train_hist['per_epoch_time'] = []
 			self.train_hist['total_time'] = 0
 
@@ -173,70 +170,71 @@ class Recog3D(object):
 		start_time = time.time()
 		if not hasattr(self, 'epoch_start'):
 			self.epoch_start = 0
+		nBatchesPerEpoch = self.data_loader.dataset.__len__() // self.batch_size
 		for epoch in range(self.epoch_start, self.epoch):
 			epoch_start_time = time.time()
 			start_time_epoch = time.time()
 
 			for iB, (x_, y_, image_) in enumerate(self.data_loader):
-				if iB == self.data_loader.dataset.__len__() // self.batch_size:
+				if iB == nBatchesPerEpoch:
 					break
 
+				x_ = x_[:,0:1,:,:,:]
 				y_id_ = y_['id']
 				y_pcode_ = y_['pcode']
 
-
-				#y_id_onehot_ = torch.zeros( self.batch_size, self.Nid )
-				#y_id_onehot_.scatter_(1, y_id_.view(-1,1), 1)
-				y_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
-				y_pcode_onehot_.scatter_(1, y_pcode_.view(-1,1), 1)
-
-
-				z_ = torch.normal( torch.zeros(self.batch_size, self.z_dim), torch.ones(self.batch_size,self.z_dim) )
 				if self.gpu_mode:
 					x_ = Variable(x_.cuda())
 					image_ = Variable(image_.cuda())
-					z_ = Variable(z_.cuda())
 					y_id_ = Variable(y_id_.cuda())
 					y_pcode_ = Variable(y_pcode_.cuda())
-					y_pcode_onehot_ = Variable(y_pcode_onehot_.cuda())
 				else:
 					x_ = Variable(x_)
 					image_ = Variable(image_)
-					z_ = Variable(z_)
 					y_id_ = Variable(y_id_)
 					y_pcode_ = Variable(y_pcode_)
-					y_pcode_onehot_ = Variable(y_pcode_onehot_)
 
 				
 				# update D network
 				self.D_optimizer.zero_grad()
 
-				D_pcode = self.D(x_)
-#				D_loss_id = self.CE_loss(D_id, y_id_)
+				D_id, D_pcode = self.D(x_)
+				D_loss_id = self.CE_loss(D_id, y_id_)
 				D_loss_pcode = self.CE_loss(D_pcode, y_pcode_)
 
-				D_loss = D_loss_pcode
+				D_loss = D_loss_id + D_loss_pcode
 				D_loss.backward()
+
 				self.train_hist['D_loss'].append(D_loss.data[0])
+				self.train_hist['D_loss_id'].append(D_loss_id.data[0])
+				self.train_hist['D_loss_pcode'].append(D_loss_pcode.data[0])
 
 				if self.gpu_mode:
-					_, predicted = torch.max(D_pcode.cpu().data, 1)
+					_, predicted_id = torch.max(D_id.cpu().data, 1)
+					_, predicted_pcode = torch.max(D_pcode.cpu().data, 1)
 				else:
-					_, predicted = torch.max(D_pcode.data, 1)
+					_, predicted_id = torch.max(D_id.data, 1)
+					_, predicted_pcode = torch.max(D_pcode.data, 1)
+				total = len(y_id_)
+				correct = (predicted_id == y_['id']).sum()
+				D_acc_id = float(correct) / total
 				total = len(y_pcode_)
-				correct = (predicted == y_['pcode']).sum()
-				D_acc = float(correct) / total
-				# D gets updated only if its accuracy is below 80%
-				self.train_hist['D_acc'].append(D_acc)
+				correct = (predicted_pcode == y_['pcode']).sum()
+				D_acc_pcode = float(correct) / total
+
+				self.train_hist['D_acc_id'].append(D_acc_id)
+				self.train_hist['D_acc_pcode'].append(D_acc_pcode)
 				self.D_optimizer.step()
 
-				if ((iB + 1) % 10) == 0:
+				if ((iB + 1) % 10) == 0 or (iB+1)==nBatchesPerEpoch:
 					secs = time.time()-start_time_epoch
 					hours = secs//3600
 					mins = secs/60%60
-					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f, D_acc:%.4f" %
-						  (hours,mins, (epoch + 1), (iB + 1), self.data_loader.dataset.__len__() // self.batch_size,
-						  D_loss.data[0], D_acc))
+					print("%2dh%2dm E[%2d] B[%d/%d] D_loss: %.4f/%.4f, D_acc:%.4f/%.4f" %
+						  (hours,mins, (epoch + 1), (iB + 1), nBatchesPerEpoch,
+						  D_loss_id.data[0], D_loss_pcode.data[0],
+						  D_acc_id, D_acc_pcode,
+						  ))
 
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			print("dumping x_hat from epoch {}".format(epoch+1))
@@ -260,19 +258,23 @@ class Recog3D(object):
 			os.makedirs(result_dir)
 
 		""" fixed image """
-		D_pcode = self.D( self.sample_x_ )
+		D_id, D_pcode = self.D( self.sample_x_ )
 		if self.gpu_mode:
-			_, predicted = torch.max(D_pcode.cpu().data, 1)
-			labels = self.sample_y_pcode_.cpu()
+			_, predicted_id = torch.max(D_id.cpu().data, 1)
+			_, predicted_pcode = torch.max(D_pcode.cpu().data, 1)
+			labels_id = self.sample_y_id.cpu()
+			labels_pcode = self.sample_y_pcode_.cpu()
 		else:
-			_, predicted = torch.max(D_pcode.data, 1)
-			labels = self.sample_y_pcode_.data
+			_, predicted_id = torch.max(D_id.data, 1)
+			_, predicted_pcode = torch.max(D_pcode.data, 1)
+			labels_id = self.sample_y_id
+			labels_pcode = self.sample_y_pcode_
 
 		fname = os.path.join( self.result_dir, self.dataset, self.model_name,
 										self.model_name+'_E%03d.txt'%(epoch))
 		with open(fname,'w') as f:
-			for (pred, label) in zip(predicted, labels):
-				f.write( "{} - {}\n".format(pred, label))
+			for (pred_id, label_id, pred_pcode, label_id) in zip(predicted_id, labels_id, predicted_pcode, labels_pcode):
+				f.write( "{} - {} // {} - {}\n".format(pred_id, label_id, pred_pcode, label_id))
 
 
 	def visualize_results(self, epoch):
