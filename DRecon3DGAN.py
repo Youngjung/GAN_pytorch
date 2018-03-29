@@ -111,7 +111,7 @@ class generator2d3d(nn.Module):
 		super(generator2d3d, self).__init__()
 
 		self.Genc = Encoder('Genc', Nid, Npcode)
-#		self.Gdec2d = Decoder2d(Npcode, nOutputCh['2d'])
+		self.Gdec2d = Decoder2d(Npcode, nOutputCh['2d'])
 		self.Gdec3d = Decoder3d(Npcode, nOutputCh['3d'])
 
 		utils.initialize_weights(self)
@@ -119,10 +119,10 @@ class generator2d3d(nn.Module):
 	def forward(self, x_, y_pcode_onehot_):
 		fx = self.Genc( x_ )
 		fx = fx.view(-1,320)
-#		xhat2d = self.Gdec2d(fx, y_pcode_onehot_)
+		xhat2d = self.Gdec2d(fx, y_pcode_onehot_)
 		xhat3d = self.Gdec3d(fx, y_pcode_onehot_)
 
-		return None, xhat3d #xhat3d
+		return xhat2d, xhat3d
 
 class discriminator2d(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
@@ -496,10 +496,10 @@ class DRecon3DGAN(object):
 					self.D2d_optimizer.zero_grad()
 					self.D3d_optimizer.zero_grad()
 	
-#					d_gan2d, d_id2d, d_expr2d = self.D2d(projected)
-#					loss_d_real_gan2d = self.BCE_loss(d_gan2d, self.y_real_)
-#					loss_d_real_id2d = self.CE_loss(d_id2d, y_id_)
-#					loss_d_real_expr2d = self.CE_loss(d_expr2d, y_pcode_)
+					d_gan2d, d_id2d, d_expr2d = self.D2d(projected)
+					loss_d_real_gan2d = self.BCE_loss(d_gan2d, self.y_real_)
+					loss_d_real_id2d = self.CE_loss(d_id2d, y_id_)
+					loss_d_real_expr2d = self.CE_loss(d_expr2d, y_pcode_)
 
 					d_gan3d, d_id3d, d_expr3d = self.D3d(x3D_)
 					loss_d_real_gan3d = self.BCE_loss(d_gan3d, self.y_real_)
@@ -507,31 +507,31 @@ class DRecon3DGAN(object):
 					loss_d_real_expr3d = self.CE_loss(d_expr3d, y_pcode_)
 	
 					xhat2d, xhat3d = self.G(x2D_, y_random_pcode_onehot_)
-#					d_fake_gan2d, _, _ = self.D2d( xhat2d )
+					d_fake_gan2d, _, _ = self.D2d( xhat2d )
 					d_fake_gan3d, _, _ = self.D3d( xhat3d )
-#					loss_d_fake_gan2d = self.BCE_loss(d_fake_gan2d, self.y_fake_)
+					loss_d_fake_gan2d = self.BCE_loss(d_fake_gan2d, self.y_fake_)
 					loss_d_fake_gan3d = self.BCE_loss(d_fake_gan3d, self.y_fake_)
 	
-#					num_correct_real2d = torch.sum(d_gan2d>0.5)
-#					num_correct_fake2d = torch.sum(d_fake_gan2d<0.5)
-#					D2d_acc = float(num_correct_real2d.data[0] + num_correct_fake2d.data[0]) / (self.batch_size*2)
+					num_correct_real2d = torch.sum(d_gan2d>0.5)
+					num_correct_fake2d = torch.sum(d_fake_gan2d<0.5)
+					D2d_acc = float(num_correct_real2d.data[0] + num_correct_fake2d.data[0]) / (self.batch_size*2)
 					num_correct_real3d = torch.sum(d_gan3d>0.5)
 					num_correct_fake3d = torch.sum(d_fake_gan3d<0.5)
 					D3d_acc = float(num_correct_real3d.data[0] + num_correct_fake3d.data[0]) / (self.batch_size*2)
 	
-#					D2d_loss = loss_d_real_gan2d + loss_d_real_id2d + loss_d_real_expr2d + loss_d_fake_gan2d
+					D2d_loss = loss_d_real_gan2d + loss_d_real_id2d + loss_d_real_expr2d + loss_d_fake_gan2d
 					D3d_loss = loss_d_real_gan3d + loss_d_real_id3d + loss_d_real_expr3d + loss_d_fake_gan3d
 
 					if iD == 0:	
-#						self.train_hist['D2d_loss'].append(D2d_loss.data[0])
+						self.train_hist['D2d_loss'].append(D2d_loss.data[0])
 						self.train_hist['D3d_loss'].append(D3d_loss.data[0])
-#						self.train_hist['D2d_acc'].append(D2d_acc)
+						self.train_hist['D2d_acc'].append(D2d_acc)
 						self.train_hist['D3d_acc'].append(D3d_acc)
 	
-#					D2d_loss.backward()#retain_graph=True)
+					D2d_loss.backward(retain_graph=True)
 					D3d_loss.backward()
-#					if D2d_acc < 0.8:
-#						self.D2d_optimizer.step()
+					if D2d_acc < 0.8:
+						self.D2d_optimizer.step()
 					if D3d_acc < 0.8:
 						self.D3d_optimizer.step()
 
@@ -541,18 +541,18 @@ class DRecon3DGAN(object):
 		
 					xhat2d, xhat3d = self.G(x2D_, y_pcode_onehot_)
 
-#					d_gan2d, d_id2d, d_expr2d = self.D2d(xhat2d)
-#					loss_g_gan2d = self.BCE_loss(d_gan2d, self.y_real_)
-#					loss_g_id2d = self.CE_loss(d_id2d, y_id_)
-#					loss_g_expr2d = self.CE_loss(d_expr2d, y_pcode_)
+					d_gan2d, d_id2d, d_expr2d = self.D2d(xhat2d)
+					loss_g_gan2d = self.BCE_loss(d_gan2d, self.y_real_)
+					loss_g_id2d = self.CE_loss(d_id2d, y_id_)
+					loss_g_expr2d = self.CE_loss(d_expr2d, y_pcode_)
 
 					d_gan3d, d_id3d, d_expr3d = self.D3d(xhat3d)
 					loss_g_gan3d = self.BCE_loss(d_gan3d, self.y_real_)
 					loss_g_id3d = self.CE_loss(d_id3d, y_id_)
 					loss_g_expr3d = self.CE_loss(d_expr3d, y_pcode_)
 
-#					G_loss = loss_g_gan2d + loss_g_id2d + loss_g_expr2d # + \
-					G_loss =			loss_g_gan3d + loss_g_id3d + loss_g_expr3d
+					G_loss = loss_g_gan2d + loss_g_id2d + loss_g_expr2d + \
+								loss_g_gan3d + loss_g_id3d + loss_g_expr3d
 	
 					if iG == 0:
 						self.train_hist['G_loss'].append(G_loss.data[0])
@@ -564,14 +564,14 @@ class DRecon3DGAN(object):
 					secs = time.time()-start_time_epoch
 					hours = secs//3600
 					mins = secs/60%60
-					#print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f/%.4f, G: %.4f, D_acc:%.4f/%.4f" %
-					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f, G: %.4f, D_acc:%.4f"% 
+					#print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f, G: %.4f, D_acc:%.4f"% 
+					print("%2dh%2dm E[%2d] B[%d/%d] D: %.4f/%.4f, G: %.4f, D_acc:%.4f/%.4f" %
 						  (hours,mins, (epoch + 1), (iB + 1), nBatchesPerEpoch,
-						  #D2d_loss.data[0],
+						  D2d_loss.data[0],
 						  D3d_loss.data[0],
 						  G_loss.data[0],
-						  D3d_acc) )
-						  #D2d_acc) )
+						  D3d_acc,
+						  D2d_acc) )
 				
 			self.train_hist['per_epoch_time'].append(time.time() - epoch_start_time)
 			if epoch==0 or (epoch+1)%5 == 0:
@@ -600,14 +600,14 @@ class DRecon3DGAN(object):
 			os.makedirs(save_dir)
 
 		if self.gpu_mode:
-#			xhat2d = xhat2d.cpu().data.numpy().squeeze()
+			xhat2d = xhat2d.cpu().data.numpy().squeeze()
 			xhat3d = xhat3d.cpu().data.numpy().squeeze()
 		else:
-#			xhat2d = xhat2d.data.numpy().squeeze()
+			xhat2d = xhat2d.data.numpy().squeeze()
 			xhat3d = xhat3d.data.numpy().squeeze()
 
-#		fname = os.path.join( save_dir , self.model_name + '_xhat2d_epoch%03d' % epoch + '.npy' )
-#		xhat2d.dump(fname)
+		fname = os.path.join( save_dir , self.model_name + '_xhat2d_epoch%03d' % epoch + '.npy' )
+		xhat2d.dump(fname)
 		fname = os.path.join( save_dir , self.model_name + '_xhat3d_epoch%03d' % epoch + '.npy' )
 		xhat3d.dump(fname)
 
