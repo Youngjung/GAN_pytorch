@@ -633,46 +633,64 @@ class DRecon3DGAN(object):
 		y_ = Variable( y_.cuda(), volatile=True )
 		y_onehot_ = Variable( y_onehot_.cuda(), volatile=True )
 
-		samples = self.G(x2D_, y_onehot_)
+		xhat2d, xhat3d = self.G(x2D_, y_onehot_)
 	
-		samples = samples.cpu().data.numpy()
+		if self.gpu_mode:
+			xhat2d = xhat2d.cpu().data.numpy().squeeze()
+			xhat3d = xhat3d.cpu().data.numpy().squeeze()
+			x3D = x3D.numpy()
+		else:
+			xhat2d = xhat2d.data.numpy().squeeze()
+			xhat3d = xhat3d.data.numpy().squeeze()
+			x3D = x3D.numpy()
+
 		print( 'saving...')
 		for i in range( self.batch_size ):
-			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate', self.model_name + '_%02d_expr%02d.png'%(i,y_[i].data[0]))
+			fname = os.path.join(save_dir, self.model_name + '_%02d_expr%02d.png'%(i,y_[i].data[0]))
 			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
-			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
-										self.model_name+'_recon%02d_expr%02d.npy'%(i,y_[i].data[0]))
-			np.expand_dims(samples[i],0).dump( filename )
-			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
-										self.model_name+'_recon%02d_GT_expr%02d.npy'%(i,y_[i].data[0]))
-			np.expand_dims(x3D[i],0).dump( filename )
+
+			filename = os.path.join( save_dir,self.model_name+'_recon%02d_expr%02d_xhat2d.npy'%(i,y_[i].data[0]))
+			xhat2d[i:i+1].dump( filename )
+	
+			filename = os.path.join( save_dir,self.model_name+'_recon%02d_expr%02d_xhat3d.npy'%(i,y_[i].data[0]))
+			xhat3d[i:i+1].dump( filename )
+	
+			filename = os.path.join( save_dir,self.model_name+'_recon%02d_GT_expr%02d.npy'%(i,y_[i].data[0]))
+			x3D[i:i+1].dump( filename )
 
 		print( 'fixed input with different expr...')
 		# fixed input with different expr
 		nPcodes = self.Npcode
-		sample_pcode = torch.zeros( nPcodes, nPcodes )
+		x2ds = x2D_[0:3,:,:,:]
+		temp_x2ds = torch.split(x2ds,1)
+		x2ds = []
+		for i in range(3):
+			x2ds += temp_x2ds[i:i+1]*nPcodes
+		x2ds = torch.cat(x2ds,0)
+		sample_pcode_onehot = torch.zeros( nPcodes*3, nPcodes )
 		for iS in range( nPcodes*3 ):
 			ii = iS%nPcodes
-			sample_pcode[iS,ii] = 1
-		sample_pcode = Variable( sample_pcode.cuda(), volatile=True )
+			sample_pcode_onehot[iS,ii] = 1
+		sample_pcode_onehot = Variable( sample_pcode_onehot.cuda(), volatile=True )
 
-		for i in range( self.batch_size ):
-		# for i in range( 10 ):
-			sample_x2D_s = (x2D_[i].unsqueeze(0),)*nPcodes
-			sample_x2D_ = torch.cat( sample_x2D_s )
-	
-			samples = self.G(sample_x2D_, sample_pcode)
-
+		xhat2d, xhat3d = self.G( x2ds, sample_pcode_onehot )
+		xhat2d = xhat2d.cpu().data.numpy().squeeze()
+		xhat3d = xhat3d.cpu().data.numpy().squeeze()
+		for i in range( 3 ):
 			print( 'saving...{}'.format(i))
-			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'generate', 
-									self.model_name + '_%02d_varyingexpr.png'%(i))
-			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
+			fname = os.path.join(save_dir,self.model_name + '_%02d_varyingexpr.png'%(i))
+			imageio.imwrite(fname, x2D_[i].cpu().data.numpy().transpose(1,2,0))
 
-			samples_numpy = samples.cpu().data.numpy()
-			for j in range( nPcodes ):
-				filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
-											self.model_name+'_sample%03d_expr%02d.npy'%(i,j))
-				np.expand_dims(samples_numpy[j],0).dump( filename )
+			fname = os.path.join(save_dir,self.model_name + 'xhat2d_%02d.npy'%(i))
+			xhat2d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+			
+			fname = os.path.join(save_dir,self.model_name + 'xhat3d_%02d.npy'%(i))
+			xhat3d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+
+#			for j in range( nPcodes ):
+#				filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
+#											self.model_name+'_sample%03d_expr%02d.npy'%(i,j))
+#				np.expand_dims(samples_numpy[j],0).dump( filename )
 
 
 
