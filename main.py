@@ -63,6 +63,7 @@ def parse_args():
 	parser.add_argument('--beta1', type=float, default=0.5)
 	parser.add_argument('--beta2', type=float, default=0.999)
 	parser.add_argument('--gpu_mode', type=str2bool, default=True)
+	parser.add_argument('--multi_gpu', type=str2bool, default=False)
 	parser.add_argument('--num_workers', type=int, default='1', help='number of threads for DataLoader')
 	parser.add_argument('--comment', type=str, default='', help='comment to put on model_name')
 	parser.add_argument('--fname_cache', type=str, default='', help='filename of cached datalist, ex)cache_Bosphorus.txt')
