@@ -64,7 +64,10 @@ class Decoder3d( nn.Module ):
 			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.ReLU(),
-			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
+			nn.ConvTranspose3d(32, 16, 4, 2, 1, bias=False),
+			nn.BatchNorm3d(16),
+			nn.ReLU(),
+			nn.ConvTranspose3d(16, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot):
@@ -97,7 +100,10 @@ class Decoder2d( nn.Module ):
 			nn.ConvTranspose2d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm2d(32),
 			nn.ReLU(),
-			nn.ConvTranspose2d(32, nOutputCh, 4, 2, 1, bias=False),
+			nn.ConvTranspose2d(32, 16, 4, 2, 1, bias=False),
+			nn.BatchNorm2d(16),
+			nn.ReLU(),
+			nn.ConvTranspose2d(16, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot):
@@ -132,7 +138,10 @@ class discriminator2d(nn.Module):
 		self.nInputCh = nInputCh
 
 		self.conv = nn.Sequential(
-			nn.Conv2d(nInputCh, 32, 4, 2, 1, bias=False), # 128 -> 64
+			nn.Conv2d(nInputCh, 16, 4, 2, 1, bias=False), # 128 -> 64
+			norm(16),
+			nn.LeakyReLU(0.2),
+			nn.Conv2d(16, 32, 4, 2, 1, bias=False), # 64 -> 32
 			norm(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv2d(32, 64, 4, 2, 1, bias=False), # 64 -> 32
@@ -180,7 +189,10 @@ class discriminator3d(nn.Module):
 		self.nInputCh = nInputCh
 
 		self.conv = nn.Sequential(
-			nn.Conv3d(nInputCh, 32, 4, 2, 1, bias=False),
+			nn.Conv3d(nInputCh, 16, 4, 2, 1, bias=False),
+			norm(16),
+			nn.LeakyReLU(0.2),
+			nn.Conv3d(16, 32, 4, 2, 1, bias=False),
 			norm(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
@@ -232,6 +244,7 @@ class DRecon3DGAN(object):
 		self.dataroot_dir = args.dataroot_dir
 		self.log_dir = args.log_dir
 		self.gpu_mode = args.gpu_mode
+		self.multi_gpu = args.multi_gpu
 		self.num_workers = args.num_workers
 		self.model_name = args.gan_type
 		self.centerBosphorus = args.centerBosphorus
@@ -303,7 +316,7 @@ class DRecon3DGAN(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
-											shape=128, image_shape=256, center=self.centerBosphorus,
+											shape=256, image_shape=256, center=self.centerBosphorus,
 											use_colorPCL=True),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
@@ -318,75 +331,6 @@ class DRecon3DGAN(object):
 		self.D2d_optimizer = optim.Adam(self.D2d.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 		self.D3d_optimizer = optim.Adam(self.D3d.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 
-		# fixed samples for reconstruction visualization
-		path_sample = os.path.join( self.result_dir, self.dataset, self.model_name, 'fixed_sample' )
-		if args.interpolate or args.generate:
-			print( 'skipping fixed sample : interpolate/generate' )
-		elif not os.path.exists( path_sample ):
-			print( 'Generating fixed sample for visualization...' )
-			os.makedirs( path_sample )
-			nPcodes = self.Npcode
-			nSamples = self.sample_num-nPcodes*3 # 13 people with fixed pcode, but note that 3 people with all pcodes will be added
-			list_sample_x2Ds_raw = []
-			list_sample_x3Ds_raw = []
-			for iB, (sample_x3D_,sample_y_,sample_x2D_) in enumerate(self.data_loader):
-				list_sample_x2Ds_raw.append( sample_x2D_ )
-				list_sample_x3Ds_raw.append( sample_x3D_ )
-				if iB > (nSamples+3) // self.batch_size:
-					break
-			# store different people for fixed pcode
-			list_sample_x2Ds_raw = torch.split( torch.cat(list_sample_x2Ds_raw),1)
-			list_sample_x3Ds_raw = torch.split( torch.cat(list_sample_x3Ds_raw),1)
-			sample_x2D_s = list_sample_x2Ds_raw[:nSamples]
-			sample_x3D_s = list_sample_x3Ds_raw[:nSamples]
-
-			# add 3 people for all pcodes
-			for i in range(3):
-				sample_x2D_s += list_sample_x2Ds_raw[nSamples+i:nSamples+i+1]*nPcodes
-				sample_x3D_s += list_sample_x3Ds_raw[nSamples+i:nSamples+i+1]*nPcodes
-
-			# concat all people
-			self.sample_x2D_ = torch.cat( sample_x2D_s )
-			self.sample_x3D_ = torch.cat( sample_x3D_s )
-
-			# make pcodes
-			self.sample_pcode_ = torch.zeros( nSamples+nPcodes*3, nPcodes )
-			self.sample_pcode_[:nSamples,-1]=1 # N ( neutral )
-			for iS in range( nPcodes*3 ):
-				ii = iS%self.Npcode
-				self.sample_pcode_[iS+nSamples,ii] = 1
-	
-			nSpS = int(math.ceil( math.sqrt( nSamples+nPcodes*3 ) )) # num samples per side
-			fname = os.path.join( path_sample, 'sampleGT.png')
-			utils.save_images(self.sample_x2D_[:nSpS*nSpS,:,:,:].numpy().transpose(0,2,3,1), [nSpS,nSpS],fname)
-	
-			fname = os.path.join( path_sample, 'sampleGT_2D.npy')
-			self.sample_x2D_.numpy().dump( fname )
-			fname = os.path.join( path_sample, 'sampleGT_3D.npy')
-			self.sample_x3D_.numpy().dump( fname )
-			fname = os.path.join( path_sample, 'sampleGT_pcode.npy')
-			self.sample_pcode_.numpy().dump( fname )
-		else:
-			print( 'Loading fixed sample for visualization...' )
-			fname = os.path.join( path_sample, 'sampleGT_2D.npy')
-			with open( fname ) as fhandle:
-				self.sample_x2D_ = torch.Tensor(pickle.load( fhandle ))
-			fname = os.path.join( path_sample, 'sampleGT_3D.npy')
-			with open( fname ) as fhandle:
-				self.sample_x3D_ = torch.Tensor(pickle.load( fhandle ))
-			fname = os.path.join( path_sample, 'sampleGT_pcode.npy')
-			with open( fname ) as fhandle:
-				self.sample_pcode_ = torch.Tensor( pickle.load( fhandle ))
-
-		if not args.interpolate and not args.generate:
-			if self.gpu_mode:
-				self.sample_x2D_ = Variable(self.sample_x2D_.cuda(), volatile=True)
-				self.sample_pcode_ = Variable(self.sample_pcode_.cuda(), volatile=True)
-			else:
-				self.sample_x2D_ = Variable(self.sample_x2D_, volatile=True)
-				self.sample_pcode_ = Variable(self.sample_pcode_, volatile=True)
-
-
 		if self.gpu_mode:
 			self.G.cuda()
 			self.D2d.cuda()
@@ -395,6 +339,12 @@ class DRecon3DGAN(object):
 			self.BCE_loss = nn.BCELoss().cuda()
 			self.MSE_loss = nn.MSELoss().cuda()
 			self.L1_loss = nn.L1Loss().cuda()
+
+			if self.multi_gpu:
+				gpus = [0,1]
+				self.G = torch.nn.DataParallel(self.G, device_ids=gpus).cuda() 
+				self.D2d = torch.nn.DataParallel(self.D2d, device_ids=gpus).cuda() 
+				self.D3d = torch.nn.DataParallel(self.D3d, device_ids=gpus).cuda() 
 		else:
 			self.CE_loss = nn.CrossEntropyLoss()
 			self.BCE_loss = nn.BCELoss()
@@ -700,9 +650,14 @@ class DRecon3DGAN(object):
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 
-		torch.save(self.G.state_dict(), os.path.join(save_dir, self.model_name + '_G.pkl'))
-		torch.save(self.D2d.state_dict(), os.path.join(save_dir, self.model_name + '_D2d.pkl'))
-		torch.save(self.D3d.state_dict(), os.path.join(save_dir, self.model_name + '_D3d.pkl'))
+		if self.multi_gpu:
+			torch.save(self.G.module.state_dict(), os.path.join(save_dir, self.model_name + '_G.pkl'))
+			torch.save(self.D2d.module.state_dict(), os.path.join(save_dir, self.model_name + '_D2d.pkl'))
+			torch.save(self.D3d.module.state_dict(), os.path.join(save_dir, self.model_name + '_D3d.pkl'))
+		else:
+			torch.save(self.G.state_dict(), os.path.join(save_dir, self.model_name + '_G.pkl'))
+			torch.save(self.D2d.state_dict(), os.path.join(save_dir, self.model_name + '_D2d.pkl'))
+			torch.save(self.D3d.state_dict(), os.path.join(save_dir, self.model_name + '_D3d.pkl'))
 
 		with open(os.path.join(save_dir, self.model_name + '_history.pkl'), 'wb') as f:
 			pickle.dump(self.train_hist, f)
@@ -710,9 +665,14 @@ class DRecon3DGAN(object):
 	def load(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 
-		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
-		self.D2d.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D2d.pkl')))
-		self.D3d.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D3d.pkl')))
+		if self.multi_gpu:
+			self.G.module.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
+			self.D2d.module.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D2d.pkl')))
+			self.D3d.module.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D3d.pkl')))
+		else:
+			self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
+			self.D2d.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D2d.pkl')))
+			self.D3d.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D3d.pkl')))
 
 		try:
 			with open(os.path.join(save_dir, self.model_name + '_history.pkl')) as fhandle:
