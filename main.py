@@ -15,6 +15,7 @@ from GAN3D import GAN3D
 from VAEGAN3D import VAEGAN3D
 from DRGAN3D import DRGAN3D
 from Recog3D import Recog3D
+from Recog2D import Recog2D
 from VAEDRGAN3D import VAEDRGAN3D
 from DRcycleGAN3D import DRcycleGAN3D
 from CycleGAN3D import CycleGAN3D
@@ -40,7 +41,8 @@ def parse_args():
 						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN',
 									'DRGAN', 'AE',
 									'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'DRGAN2D',
-									'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
+									'Recog3D','Recog2D',
+									'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
 									'DRecon3DGAN','DRecon2DGAN',
 									'AE3D'],
 						help='The type of GAN')#, required=True)
@@ -170,6 +172,8 @@ def main():
 		gan = DRGAN3D(opts)
 	elif opts.gan_type == 'Recog3D':
 		gan = Recog3D(opts)
+	elif opts.gan_type == 'Recog2D':
+		gan = Recog2D(opts)
 	elif opts.gan_type == 'VAEDRGAN3D':
 		gan = VAEDRGAN3D(opts)
 	elif opts.gan_type == 'DRcycleGAN3D':
