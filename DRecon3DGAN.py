@@ -64,10 +64,7 @@ class Decoder3d( nn.Module ):
 			nn.ConvTranspose3d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm3d(32),
 			nn.ReLU(),
-			nn.ConvTranspose3d(32, 16, 4, 2, 1, bias=False),
-			nn.BatchNorm3d(16),
-			nn.ReLU(),
-			nn.ConvTranspose3d(16, nOutputCh, 4, 2, 1, bias=False),
+			nn.ConvTranspose3d(32, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot):
@@ -100,10 +97,7 @@ class Decoder2d( nn.Module ):
 			nn.ConvTranspose2d(64, 32, 4, 2, 1, bias=False),
 			nn.BatchNorm2d(32),
 			nn.ReLU(),
-			nn.ConvTranspose2d(32, 16, 4, 2, 1, bias=False),
-			nn.BatchNorm2d(16),
-			nn.ReLU(),
-			nn.ConvTranspose2d(16, nOutputCh, 4, 2, 1, bias=False),
+			nn.ConvTranspose2d(32, nOutputCh, 4, 2, 1, bias=False),
 			nn.Sigmoid(),
 		)
 	def forward(self, fx, y_pcode_onehot):
@@ -316,7 +310,7 @@ class DRecon3DGAN(object):
 		elif self.dataset == 'Bosphorus':
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
-											shape=256, image_shape=256, center=self.centerBosphorus,
+											shape=128, image_shape=256, center=self.centerBosphorus,
 											use_colorPCL=True),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
