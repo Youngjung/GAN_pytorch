@@ -76,13 +76,12 @@ def parse_args():
 	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
 	parser.add_argument('--nDaccAvg', type=int, default=5, help='number of batches for moving averaging D_acc')
 
-	# below arguments are for interpolation (eval mode)
-	parser.add_argument('--interpolate', type=str, default='', help='generate samples with interpolation from saved model')
+	# below arguments are for eval mode
+	parser.add_argument('--eval', type=str, default='', help='generate, interp_id, interp_expr, control_expr')
 	parser.add_argument('--is_enc', type=str2bool, default=False, help='make latent variable from input images')
 	parser.add_argument('--n_interp', type=int, default=20, help='number of interpolation points')
 
 	# below arguments are for generation (eval mode)
-	parser.add_argument('--generate', type=str2bool, default=False, help='generate samples from saved model')
 	parser.add_argument('--fix_z', type=str2bool, default=False, help='fix z')
 
 	return check_args(parser.parse_args())
@@ -191,24 +190,31 @@ def main():
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
-	if opts.resume or opts.generate or opts.interpolate:
+	if opts.resume or len(opts.eval)>0:
 		print(" [*] Loading saved model...")
 		gan.load()
 		print(" [*] Loading finished!")
 
 	# launch the graph in a session
-	if not opts.generate and not opts.interpolate:
+	if len(opts.eval)==0:
 		gan.train()
 		print(" [*] Training finished!")
+	else:
+		print(" [*] Training skipped!")
 
 	# visualize learned generator
-	if opts.generate:
+	if opts.eval == 'generate':
 		gan.visualize_results( opts.epoch )
-	if opts.interpolate:
-		if opts.interpolate == 'z':
-			gan.interpolate_z( opts )
-		elif opts.interpolate == 'id':
-			gan.interpolate_id( opts )
+	elif opts.eval == 'interp_z':
+		gan.interpolate_z( opts )
+	elif opts.eval == 'interp_id':
+		gan.interpolate_id( opts )
+	elif opts.eval == 'interp_expr':
+		gan.interpolate_expr( opts )
+	elif opts.eval == 'recon' :
+		gan.reconstruct( )
+	elif opts.eval == 'control_expr' :
+		gan.control_expr( )
 	print(" [*] Testing finished!")
 
 if __name__ == '__main__':

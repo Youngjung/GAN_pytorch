@@ -20,6 +20,7 @@ from DRcycleGAN3D import DRcycleGAN3D
 from CycleGAN3D import CycleGAN3D
 from AE3D import AutoEncoder3D
 from DRGAN2D import DRGAN2D 
+from DRecon3DGAN import DRecon3DGAN
 
 import pdb
 import torch, imageio
@@ -42,20 +43,6 @@ def parse_args():
 	desc = "Pytorch implementation of GAN collections"
 	parser = argparse.ArgumentParser(description=desc)
 
-	parser.add_argument('--gan_type1', type=str, default='EBGAN',
-						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN',
-									'DRGAN', 'AE',
-									'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'DRGAN2D',
-									'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
-									'AE3D'],
-						help='The type of GAN')#, required=True)
-	parser.add_argument('--gan_type2', type=str, default='EBGAN',
-						choices=['GAN', 'CGAN', 'infoGAN', 'ACGAN', 'EBGAN', 'BEGAN', 'WGAN', 'WGAN_GP', 'DRAGAN', 'LSGAN',
-									'DRGAN', 'AE',
-									'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'DRGAN2D',
-									'Recog3D', 'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
-									'AE3D'],
-						help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='Bosphorus', 
 						choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie', 'miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus'],
 						help='The name of dataset')
@@ -84,15 +71,9 @@ def parse_args():
 	parser.add_argument('--loss_option', type=str, default='', help='recon,dist,GP')
 	parser.add_argument('--n_critic', type=int, default=1, help='n_critic')
 	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
-
-	# below arguments are for interpolation (eval mode)
-	parser.add_argument('--interpolate', type=str2bool, default=False, help='generate samples with interpolation from saved model')
-	parser.add_argument('--is_enc', type=str2bool, default=False, help='make latent variable from input images')
-	parser.add_argument('--n_interp', type=int, default=20, help='number of interpolation points')
-
-	# below arguments are for generation (eval mode)
-	parser.add_argument('--generate', type=str2bool, default=False, help='generate samples from saved model')
-	parser.add_argument('--fix_z', type=str2bool, default=False, help='fix z')
+	parser.add_argument('--nDaccAvg', type=int, default=5, help='number of batches for moving averaging D_acc')
+	parser.add_argument('--fname_cache', type=str, default='', help='filename of cached datalist, ex)cache_Bosphorus.txt')
+	parser.add_argument('--multi_gpu', type=str2bool, default=False)
 
 	return check_args(parser.parse_args())
 
@@ -105,25 +86,6 @@ def check_args(opts):
 	# --result_dir
 	if not os.path.exists(opts.result_dir):
 		os.makedirs(opts.result_dir)
-
-	# --result_dir
-	if not os.path.exists(opts.log_dir):
-		os.makedirs(opts.log_dir)
-
-	# --loss_option
-	if len(opts.loss_option)>0:
-		option_part = '_'+opts.loss_option
-	else:
-		option_part = ''
-
-	if len(opts.comment)>0:
-		print( "comment: " + opts.comment )
-		comment_part = '_'+opts.comment
-	else:
-		comment_part = ''
-	tempconcat = opts.gan_type1+'_'+opts.gan_type2+option_part+comment_part
-	print( 'models and loss plot -> ' + os.path.join( opts.save_dir, opts.dataset, tempconcat ) )
-	print( 'results -> ' + os.path.join( opts.result_dir, opts.dataset, tempconcat ) )
 
 	# --epoch
 	try:
@@ -148,111 +110,23 @@ def main():
 	if opts is None:
 		exit()
 
-	opts.comment = opts.comment1
-	opts.gan_type = opts.gan_type1
-	# declare instance for GAN
-	if opts.gan_type1 == 'GAN':
-		gan1 = GAN(opts)
-	elif opts.gan_type1 == 'CGAN':
-		gan1 = CGAN(opts)
-	elif opts.gan_type1 == 'ACGAN':
-		gan1 = ACGAN(opts)
-	elif opts.gan_type1 == 'infoGAN':
-		gan1 = infoGAN(opts, SUPERVISED = True)
-	elif opts.gan_type1 == 'EBGAN':
-		gan1 = EBGAN(opts)
-	elif opts.gan_type1 == 'WGAN':
-		gan1 = WGAN(opts)
-	elif opts.gan_type1 == 'WGAN_GP':
-		gan1 = WGAN_GP(opts)
-	elif opts.gan_type1 == 'DRAGAN':
-		gan1 = DRAGAN(opts)
-	elif opts.gan_type1 == 'LSGAN':
-		gan1 = LSGAN(opts)
-	elif opts.gan_type1 == 'BEGAN':
-		gan1 = BEGAN(opts)
-	elif opts.gan_type1 == 'DRGAN':
-		gan1 = DRGAN(opts)
-	elif opts.gan_type1 == 'AE':
-		gan1 = AutoEncoder(opts)
-	elif opts.gan_type1 == 'GAN3D':
-		gan1 = GAN3D(opts)
-	elif opts.gan_type1 == 'VAEGAN3D':
-		gan1 = VAEGAN3D(opts)
-	elif opts.gan_type1 == 'DRGAN3D':
-		gan1 = DRGAN3D(opts)
-	elif opts.gan_type1 == 'Recog3D':
-		gan1 = Recog3D(opts)
-	elif opts.gan_type1 == 'VAEDRGAN3D':
-		gan1 = VAEDRGAN3D(opts)
-	elif opts.gan_type1 == 'DRcycleGAN3D':
-		gan1 = DRcycleGAN3D(opts)
-	elif opts.gan_type1 == 'CycleGAN3D':
-		gan1 = CycleGAN3D(opts)
-	elif opts.gan_type1 == 'AE3D':
-		gan1 = AutoEncoder3D(opts)
-	elif opts.gan_type1 == 'DRGAN2D':
-		gan1 = DRGAN2D(opts)
-	else:
-		raise Exception("[!] There is no option for " + opts.gan_type1)
 
-	opts.comment = opts.comment2
-	opts.gan_type = opts.gan_type2
-	# declare instance for GAN
-	if opts.gan_type2 == 'GAN':
-		gan2 = GAN(opts)
-	elif opts.gan_type2 == 'CGAN':
-		gan2 = CGAN(opts)
-	elif opts.gan_type2 == 'ACGAN':
-		gan2 = ACGAN(opts)
-	elif opts.gan_type2 == 'infoGAN':
-		gan2 = infoGAN(opts, SUPERVISED = True)
-	elif opts.gan_type2 == 'EBGAN':
-		gan2 = EBGAN(opts)
-	elif opts.gan_type2 == 'WGAN':
-		gan2 = WGAN(opts)
-	elif opts.gan_type2 == 'WGAN_GP':
-		gan2 = WGAN_GP(opts)
-	elif opts.gan_type2 == 'DRAGAN':
-		gan2 = DRAGAN(opts)
-	elif opts.gan_type2 == 'LSGAN':
-		gan2 = LSGAN(opts)
-	elif opts.gan_type2 == 'BEGAN':
-		gan2 = BEGAN(opts)
-	elif opts.gan_type2 == 'DRGAN':
-		gan2 = DRGAN(opts)
-	elif opts.gan_type2 == 'AE':
-		gan2 = AutoEncoder(opts)
-	elif opts.gan_type2 == 'GAN3D':
-		gan2 = GAN3D(opts)
-	elif opts.gan_type2 == 'VAEGAN3D':
-		gan2 = VAEGAN3D(opts)
-	elif opts.gan_type2 == 'DRGAN3D':
-		gan2 = DRGAN3D(opts)
-	elif opts.gan_type2 == 'Recog3D':
-		gan2 = Recog3D(opts)
-	elif opts.gan_type2 == 'VAEDRGAN3D':
-		gan2 = VAEDRGAN3D(opts)
-	elif opts.gan_type2 == 'DRcycleGAN3D':
-		gan2 = DRcycleGAN3D(opts)
-	elif opts.gan_type2 == 'CycleGAN3D':
-		gan2 = CycleGAN3D(opts)
-	elif opts.gan_type2 == 'AE3D':
-		gan2 = AutoEncoder3D(opts)
-	elif opts.gan_type2 == 'DRGAN2D':
-		gan2 = DRGAN2D(opts)
-	else:
-		raise Exception("[!] There is no option for " + opts.gan_type2)
+	opts.comment = '2d3d_fixed'
+	opts.gan_type = 'DRecon3DGAN'
+	gan2 = DRecon3DGAN(opts)
+
+	opts.comment = 'expr11_DaccAvg'
+	opts.gan_type = 'DRGAN3D'
+	opts.fname_cache = 'cache_Bosphorus_12.txt'
+	gan1 = DRGAN3D(opts)
 
 	print(" [*] Loading saved model...")
 	gan1.load()
 	gan2.load()
 	gan1.G = gan1.G.cuda()
 	gan2.G = gan2.G.cuda()
-	gan2.Enc = gan2.Enc.cuda()
 	print(" [*] Loading finished!")
 
-	
 	data_dir = os.path.join( opts.dataroot_dir, opts.dataset )
 	data_loader = DataLoader( Bosphorus(data_dir, use_image=True,
 										skipCodes=['YR','PR','CR'],
@@ -262,13 +136,15 @@ def main():
 								num_workers=opts.num_workers)
 	Nid = 105
 	Npcode = len(data_loader.dataset.posecodemap)
-	Nz = 50
 
 	# load batch
 	x3D, y, x2D = get_image_batch( data_loader )
 	y = y['pcode']
 	y_onehot = torch.zeros( opts.batch_size, Npcode )
 	y_onehot.scatter_(1, y.view(-1,1), 1)
+
+	y_onehot1 = torch.zeros( opts.batch_size, Npcode+1 )
+	y_onehot1.scatter_(1, (y+1).view(-1,1), 1)
 
 	# save input image
 	for i in range(opts.batch_size):
@@ -280,8 +156,14 @@ def main():
 	y_onehot = Variable( y_onehot.cuda(), volatile=True )
 
 	# visualize learned generator
-	gan1.compare( x2D, y, y_onehot )
-	gan2.compare( x2D )
+	dir_compare = 'compare'
+
+	dir_dest = os.path.join( dir_compare, 'DRGAN3D' )
+	gan1.compare( x2D, y, y_onehot1, dir_dest )
+
+	dir_dest = os.path.join( dir_compare, 'DRecon3DGAN' )
+	gan2.compare( x2D, y, y_onehot, dir_dest )
+
 	print(" [*] Testing finished!")
 
 

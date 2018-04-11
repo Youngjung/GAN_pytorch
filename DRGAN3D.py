@@ -222,9 +222,25 @@ class DRGAN3D(object):
 			self.Ni = 20
 			self.Nz = 50
 		elif self.dataset == 'Bosphorus':
+#			inclCodes = ['LFAU_9',
+#							'LFAU_10',
+#							'LFAU_12',
+#							'LFAU_12L',
+#							'LFAU_12R',
+#							'LFAU_22',
+#							'LFAU_27',
+#							'LFAU_34',
+#							'N_N',
+#							'UFAU_2',
+#							'UFAU_4',
+#							'UFAU_43',
+#							]
+			inclCodes = []
+
 			self.data_loader = DataLoader( utils.Bosphorus(data_dir, use_image=True, fname_cache=args.fname_cache,
 											transform=transforms.ToTensor(),
-											shape=128, image_shape=256, center=self.centerBosphorus),
+											shape=128, image_shape=256, center=self.centerBosphorus,
+											inclCodes=inclCodes),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 			self.Nid = 105
 			self.Npcode = len(self.data_loader.dataset.posecodemap)
@@ -812,9 +828,12 @@ class DRGAN3D(object):
 			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +'%03d.npy' % (i))
 			samples.dump(fname)
 			
-	def compare(self, x2D, y_, y_onehot ):
+	def compare(self, x2D, y_, y_onehot, dir_dest='' ):
 		print( 'comparing result...' )
-		save_dir = os.path.join(self.result_dir, self.dataset, 'compare' ) 
+		if len(dir_dest) > 0:
+			save_dir = dir_dest
+		else:
+			save_dir = os.path.join(self.result_dir, self.dataset, 'compare' )
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 
@@ -831,5 +850,4 @@ class DRGAN3D(object):
 			filename = os.path.join( self.result_dir, self.dataset, 'compare',
 										self.model_name+'_recon_%02d_expr%02d.npy'%(i,y_[i]))
 			np.expand_dims(samples[i],0).dump( filename )
-
 
