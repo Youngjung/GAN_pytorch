@@ -132,10 +132,7 @@ class discriminator2d(nn.Module):
 		self.nInputCh = nInputCh
 
 		self.conv = nn.Sequential(
-			nn.Conv2d(nInputCh, 16, 4, 2, 1, bias=False), # 128 -> 64
-			norm(16),
-			nn.LeakyReLU(0.2),
-			nn.Conv2d(16, 32, 4, 2, 1, bias=False), # 64 -> 32
+			nn.Conv2d(nInputCh, 32, 4, 2, 1, bias=False), # 128 -> 64
 			norm(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv2d(32, 64, 4, 2, 1, bias=False), # 64 -> 32
@@ -183,10 +180,7 @@ class discriminator3d(nn.Module):
 		self.nInputCh = nInputCh
 
 		self.conv = nn.Sequential(
-			nn.Conv3d(nInputCh, 16, 4, 2, 1, bias=False),
-			norm(16),
-			nn.LeakyReLU(0.2),
-			nn.Conv3d(16, 32, 4, 2, 1, bias=False),
+			nn.Conv3d(nInputCh, 32, 4, 2, 1, bias=False),
 			norm(32),
 			nn.LeakyReLU(0.2),
 			nn.Conv3d(32, 64, 4, 2, 1, bias=False),
@@ -679,8 +673,9 @@ class DRecon3DGAN(object):
 		except:
 			print('history is not found and ignored')
 
-	def interpolate_z(self, opts):
-		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp_z') 
+	def interpolate_id(self, opts):
+		print( 'interpolate_id()...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp_id') 
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 		
@@ -688,13 +683,13 @@ class DRecon3DGAN(object):
 
 		n_interp = opts.n_interp
 
-		_, y, x2D = self.get_image_batch()
+		x3D, y, x2D = self.get_image_batch()
 
-		fname = os.path.join( save_dir, self.model_name + '_input.png')
+		fname = os.path.join(save_dir, self.model_name + '_A.png')
 		imageio.imwrite(fname, x2D[0].numpy().transpose(1,2,0))
+		fname = os.path.join(save_dir, self.model_name + '_B.png')
+		imageio.imwrite(fname, x2D[1].numpy().transpose(1,2,0))
 		
-		z1 = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
-		z2 = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
 		y = y['pcode']
 		y_onehot = torch.zeros( self.batch_size, self.Npcode )
 		y_onehot.scatter_(1, y.view(-1,1), 1)
@@ -702,27 +697,45 @@ class DRecon3DGAN(object):
 		if self.gpu_mode:
 			self.G = self.G.cuda()
 			x2D = Variable(x2D.cuda(),volatile=True)
-			z1, z2 = Variable(z1.cuda(),volatile=True), Variable(z2.cuda(),volatile=True)
 			y = Variable( y.cuda(), volatile=True )
 			y_onehot = Variable( y_onehot.cuda(), volatile=True )
 
-
-		dz = (z2-z1)/n_interp
-
 		#make interpolation 3D
-		singleX2D = x2D[0].unsqueeze(0)
+		print( 'interpolating...' )
+
+		Genc = self.G.Genc
+		Gdec2d = self.G.Gdec2d
+		Gdec3d = self.G.Gdec3d
+
+		fx = Genc( x2D )
+		fx = fx.view(-1,320)
+
+		dfx = (fx[1].unsqueeze(0)-fx[0].unsqueeze(0))/n_interp
+
+		single_y = y_onehot[0].unsqueeze(0)
 		for i in range(1, n_interp):
-			z_interp = z1 + i*dz
-			samples = self.G(singleX2D, y_onehot[0].unsqueeze(0), z_interp[0].unsqueeze(0))
+			save_dir_i = os.path.join( save_dir, str(i) )
+			if not os.path.exists(save_dir_i):
+				os.makedirs(save_dir_i)
+
+			fx_interp = fx[0].unsqueeze(0) + i*dfx
+
+			xhat2d = Gdec2d(fx_interp , single_y)
+			xhat3d = Gdec3d(fx_interp , single_y)
 			if self.gpu_mode:
-				samples = samples.cpu().data.numpy()
+				xhat2d = xhat2d.cpu().data.numpy()
+				xhat3d = xhat3d.cpu().data.numpy()
 			else:
-				samples = samples.data.numpy()
-			fname = os.path.join(save_dir, self.model_name +'interp_z_%03d.npy' % (i))
-			samples.dump(fname)
-	
-	def interpolate_id(self, opts):
-		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp') 
+				xhat2d = xhat2d.data.numpy()
+				xhat3d = xhat3d.data.numpy()
+			fname = os.path.join(save_dir_i, '2d.npy' )
+			xhat2d.dump(fname)
+			fname = os.path.join(save_dir_i, '3d.npy' )
+			xhat3d.dump(fname)
+
+	def interpolate_expr(self, opts):
+		print( 'interpolate_expr()...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp_expr') 
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 		
@@ -730,66 +743,185 @@ class DRecon3DGAN(object):
 
 		n_interp = opts.n_interp
 
-		_, y, x2D = self.get_image_batch()
+		x3D, y, x2D = self.get_image_batch()
 
-		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + '_A.png')
+		fname = os.path.join(save_dir, self.model_name + '_A.png')
 		imageio.imwrite(fname, x2D[0].numpy().transpose(1,2,0))
-		fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name + '_B.png')
+		fname = os.path.join(save_dir, self.model_name + '_B.png')
 		imageio.imwrite(fname, x2D[1].numpy().transpose(1,2,0))
 		
-		z = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
 		y = y['pcode']
 		y_onehot = torch.zeros( self.batch_size, self.Npcode )
 		y_onehot.scatter_(1, y.view(-1,1), 1)
 
 		if self.gpu_mode:
 			self.G = self.G.cuda()
-			x2D, z = Variable(x2D.cuda(),volatile=True), Variable(z.cuda(),volatile=True)
+			x2D = Variable(x2D.cuda(),volatile=True)
+			y = Variable( y.cuda(), volatile=True )
+			y_onehot = Variable( y_onehot.cuda(), volatile=True )
+
+		dy = (y_onehot[1].unsqueeze(0)-y_onehot[0].unsqueeze(0))/n_interp
+
+		#make interpolation 3D
+		print( 'interpolating...' )
+		print( y_onehot[0] )
+		print( y_onehot[1] )
+
+		singleX2D = x2D[0].unsqueeze(0)
+		for i in range(1, n_interp):
+			save_dir_i = os.path.join( save_dir, str(i) )
+			if not os.path.exists(save_dir_i):
+				os.makedirs(save_dir_i)
+
+			y_interp = y_onehot[0].unsqueeze(0) + i*dy
+			xhat2d, xhat3d = self.G(singleX2D, y_interp)
+			if self.gpu_mode:
+				xhat2d = xhat2d.cpu().data.numpy()
+				xhat3d = xhat3d.cpu().data.numpy()
+			else:
+				xhat2d = xhat2d.data.numpy()
+				xhat3d = xhat3d.data.numpy()
+			fname = os.path.join(save_dir_i, '2d.npy' )
+			xhat2d.dump(fname)
+			fname = os.path.join(save_dir_i, '3d.npy' )
+			xhat3d.dump(fname)
+	
+	def control_expr(self):
+		print( 'control_expr()...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'control_expr') 
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+		
+		self.G.eval()
+
+		nSubj = 3
+
+		x3D, y, x2D = self.get_image_batch()
+
+		for i in range( nSubj ):
+			fname = os.path.join(save_dir, 'sub_{}.png'.format(i))
+			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
+
+		# fixed input with different expr
+		nPcodes = self.Npcode
+		x2ds = x2D[0:nSubj,:,:,:]
+		temp_x2ds = torch.split(x2ds,1)
+		x2ds = []
+		for i in range(nSubj):
+			x2ds += temp_x2ds[i:i+1]*nPcodes
+		x2ds = torch.cat(x2ds,0)
+
+		# different expr
+		y_onehot = torch.zeros( nPcodes*nSubj, nPcodes )
+		for iS in range( nPcodes*nSubj ):
+			ii = iS%nPcodes
+			y_onehot[iS,ii] = 1
+
+		if self.gpu_mode:
+			self.G = self.G.cuda()
+			x2ds = Variable(x2ds.cuda(),volatile=True)
+			y_onehot = Variable( y_onehot.cuda(), volatile=True )
+
+		# forward and save
+		xhat2d, xhat3d = self.G( x2ds, y_onehot )
+		xhat2d = xhat2d.cpu().data.numpy()
+		xhat3d = xhat3d.cpu().data.numpy()
+		#for i in range( nSubj ):
+		for i in range( nSubj*nPcodes ):
+			print( 'saving...{}'.format(i))
+			save_dir_i = os.path.join( save_dir, str(i) )
+			if not os.path.exists(save_dir_i):
+				os.makedirs(save_dir_i)
+
+			fname = os.path.join(save_dir_i,'2d.npy')
+			xhat2d[i:(i+1)].dump(fname)
+			#xhat2d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+			
+			fname = os.path.join(save_dir_i,'3d.npy')
+			xhat3d[i:(i+1)].dump(fname)
+			#xhat3d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+
+	def reconstruct(self):
+		print( 'reconstruct()...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, 'reconstruct') 
+		GT_dir = os.path.join( save_dir, 'GTs' )
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
+		if not os.path.exists(GT_dir):
+			os.makedirs(GT_dir)
+		
+		self.G.eval()
+
+		x3D, y, x2D = self.get_image_batch()
+
+		y = y['pcode']
+		y_onehot = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot.scatter_(1, y.view(-1,1), 1)
+
+		print( 'saving input...')
+		for i in range( self.batch_size ):
+			indicator = 'recon%02d_expr%02d'%(i,y[i])
+			fname = os.path.join(save_dir, indicator + '.png')
+			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
+
+
+		if self.gpu_mode:
+			self.G = self.G.cuda()
+			x2D = Variable(x2D.cuda(),volatile=True)
 			y = Variable( y.cuda(), volatile=True )
 			y_onehot = Variable( y_onehot.cuda(), volatile=True )
 
 
-		samples = self.G(x2D, y_onehot, z)
+		xhat2d, xhat3d = self.G(x2D, y_onehot )
 	
-		samples = samples.cpu().data.numpy()
-		print( 'saving...')
+		xhat2d = xhat2d.cpu().data.numpy()
+		xhat3d = xhat3d.cpu().data.numpy()
+		x3D = x3D.numpy()
+		print( 'saving recon...')
 		for i in range( self.batch_size ):
-			filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'interp',
-										self.model_name+'_recon%02d_expr%02d.npy'%(i,y[i].data[0]))
-			np.expand_dims(samples[i],0).dump( filename )
-		
-		dy = (y_onehot[1].unsqueeze(0)-y_onehot[0].unsqueeze(0))/n_interp
-
-		#make interpolation 3D
-		singleX2D = x2D[0].unsqueeze(0)
-		for i in range(1, n_interp):
-			y_interp = y_onehot[0].unsqueeze(0) + i*dy
-			samples = self.G(singleX2D, y_interp, z[0].unsqueeze(0))
-			if self.gpu_mode:
-				samples = samples.cpu().data.numpy()
-			else:
-				samples = samples.data.numpy()
-			fname = os.path.join(self.result_dir, self.dataset, self.model_name, 'interp', self.model_name +'%03d.npy' % (i))
-			samples.dump(fname)
+			indicator = 'recon%02d_expr%02d'%(i,y[i].data[0])
 			
-	def compare(self, x2D, y_, y_onehot ):
+			save_dir_i = os.path.join( save_dir, indicator )
+			if not os.path.exists(save_dir_i):
+				os.makedirs(save_dir_i)
+
+			filename = os.path.join( save_dir_i, '2d.npy')
+			np.expand_dims(xhat2d[i],0).dump( filename )
+			filename = os.path.join( save_dir_i, '3d.npy')
+			np.expand_dims(xhat3d[i],0).dump( filename )
+
+			filename = os.path.join( GT_dir, indicator+'.npy' )
+			np.expand_dims(x3D[i],0).dump( filename )
+		
+
+	def compare(self, x2D, y_, y_onehot, dir_dest='' ):
 		print( 'comparing result...' )
-		save_dir = os.path.join(self.result_dir, self.dataset, 'compare' ) 
+		if len(dir_dest) > 0:
+			save_dir = dir_dest
+		else:
+			save_dir = os.path.join(self.result_dir, self.dataset, 'compare' )
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 
 		# reconstruction (inference 2D-to-3D )
-		""" random noise """
-		z_ = torch.normal( torch.zeros(self.batch_size, self.Nz), torch.ones(self.batch_size,self.Nz) )
-		z_ = Variable(z_.cuda(),volatile=True)
-
-		samples = self.G(x2D, y_onehot, z_)
+		xhat2d, xhat3d = self.G(x2D, y_onehot)
 	
-		samples = samples.cpu().data.numpy()
-		print( 'saving...')
+		xhat2d = xhat2d.cpu().data.numpy()
+		xhat3d = xhat3d.cpu().data.numpy()
+
+		print( 'saving compare...')
 		for i in range( self.batch_size ):
-			filename = os.path.join( self.result_dir, self.dataset, 'compare',
-										self.model_name+'_recon_%02d_expr%02d.npy'%(i,y_[i]))
-			np.expand_dims(samples[i],0).dump( filename )
+			indicator = '%02d_expr%02d'%(i,y[i].data[0])
+			
+			save_dir_i = os.path.join( save_dir, indicator )
+			if not os.path.exists(save_dir_i):
+				os.makedirs(save_dir_i)
 
+			filename = os.path.join( save_dir_i, '2d.npy')
+			np.expand_dims(xhat2d[i],0).dump( filename )
+			filename = os.path.join( save_dir_i, '3d.npy')
+			np.expand_dims(xhat3d[i],0).dump( filename )
 
+			filename = os.path.join( GT_dir, indicator+'.npy' )
+			np.expand_dims(x3D[i],0).dump( filename )
+		
