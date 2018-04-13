@@ -10,14 +10,14 @@ from torchvision import datasets, transforms
 import pdb
 
 class Encoder( nn.Module ):
-	def __init__( self, name, Nid, Npcode ):
+	def __init__( self, dim_fx, num_id, num_c_expr ):
 		super(Encoder, self).__init__()
 		self.input_height = 100
 		self.input_width = 100
 		self.input_dim = 3
-		self.name = name
-		self.Nid = Nid
-		self.Npcode = Npcode
+		self.dim_fx = dim_fx 
+		self.num_id = num_id
+		self.num_c_expr = num_c_expr
 
 		self.conv = nn.Sequential(
 			nn.Conv2d(self.input_dim, 64, 11, 4, 1,bias=True),
@@ -32,7 +32,7 @@ class Encoder( nn.Module ):
 			nn.Conv2d(256, 512, 5, 2, 1,bias=True),
 			nn.BatchNorm2d(512),
 			nn.ReLU(),
-			nn.Conv2d(512, 320, 8 , 1, 1, bias=True),
+			nn.Conv2d(512, dim_fx, 8 , 1, 1, bias=True),
 			nn.Sigmoid(),
 		)
 
@@ -43,13 +43,14 @@ class Encoder( nn.Module ):
 		return x
 
 class Decoder3d( nn.Module ):
-	def __init__(self, Npcode, nOutputCh=4):
+	def __init__(self, dim_fx, num_c_expr, nOutputCh=4):
 		super(Decoder3d, self).__init__()
 		self.nOutputCh = nOutputCh
-		self.Npcode = Npcode
+		self.num_c_expr = num_c_expr
+		self.dim_fx = dim_fx 
 
 		self.deconv = nn.Sequential(
-			nn.ConvTranspose3d(320+Npcode, 512, 4, bias=False),
+			nn.ConvTranspose3d(dim_fx+num_c_expr, 512, 4, bias=False),
 			nn.BatchNorm3d(512),
 			nn.ReLU(),
 			nn.ConvTranspose3d(512, 256, 4, 2, 1, bias=False),
@@ -73,16 +74,17 @@ class Decoder3d( nn.Module ):
 		return x
 
 class Decoder2d( nn.Module ):
-	def __init__(self, Npcode, nOutputCh=4):
+	def __init__(self, dim_fx, num_c_expr, nOutputCh=4):
 		super(Decoder2d, self).__init__()
 		self.nOutputCh = nOutputCh
+		self.dim_fx = dim_fx 
 
 		self.fc = nn.Sequential(
-			nn.Linear( 320+Npcode, 320 )
+			nn.Linear( dim_fx+num_c_expr, dim_fx )
 		)
 
 		self.fconv = nn.Sequential(
-			nn.ConvTranspose2d(320, 512, 4, bias=False),
+			nn.ConvTranspose2d(dim_fx, 512, 4, bias=False),
 			nn.BatchNorm2d(512),
 			nn.ReLU(),
 			nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
@@ -107,27 +109,28 @@ class Decoder2d( nn.Module ):
 		return x
 
 class generator2d3d(nn.Module):
-	def __init__(self, Nid, Npcode, nOutputCh=4):
+	def __init__(self, dim_fx, num_id, num_c_expr, nOutputCh=4):
 		super(generator2d3d, self).__init__()
+		self.dim_fx = dim_fx
 
-		self.Genc = Encoder('Genc', Nid, Npcode)
-		self.Gdec2d = Decoder2d(Npcode, nOutputCh['2d'])
-		self.Gdec3d = Decoder3d(Npcode, nOutputCh['3d'])
+		self.Genc = Encoder(dim_fx, num_id, num_c_expr)
+		self.Gdec2d = Decoder2d(dim_fx, num_c_expr, nOutputCh['2d'])
+		self.Gdec3d = Decoder3d(dim_fx, num_c_expr, nOutputCh['3d'])
 
 		utils.initialize_weights(self)
 
 	def forward(self, x_, y_pcode_onehot_):
 		fx = self.Genc( x_ )
-		fx = fx.view(-1,320)
+		fx = fx.view(-1,self.dim_fx) # shouldn't it be squeeze? (same but semantically)
 		xhat2d = self.Gdec2d(fx, y_pcode_onehot_)
 		xhat3d = self.Gdec3d(fx, y_pcode_onehot_)
 
-		return xhat2d, xhat3d
+		return fx, xhat2d, xhat3d
 
 class discriminator2d(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, Nid=105, Npcode=48, nInputCh=4, norm=nn.BatchNorm2d):
+	def __init__(self, num_id=105, num_c_expr=48, nInputCh=4, norm=nn.BatchNorm2d):
 		super(discriminator2d, self).__init__()
 		self.nInputCh = nInputCh
 
@@ -155,11 +158,11 @@ class discriminator2d(nn.Module):
 		)
 
 		self.convID = nn.Sequential(
-			nn.Conv2d(512, Nid, 4, bias=False),
+			nn.Conv2d(512, num_id, 4, bias=False),
 		)
 
 		self.convPCode = nn.Sequential(
-			nn.Conv2d(512, Npcode, 4, bias=False),
+			nn.Conv2d(512, num_c_expr, 4, bias=False),
 		)
 		utils.initialize_weights(self)
 
@@ -175,7 +178,7 @@ class discriminator2d(nn.Module):
 class discriminator3d(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
 	# Architecture : (64)4c2s-(128)4c2s_BL-FC1024_BL-FC1_S
-	def __init__(self, Nid=105, Npcode=48, nInputCh=4, norm=nn.BatchNorm3d):
+	def __init__(self, num_id=105, num_c_expr=48, nInputCh=4, norm=nn.BatchNorm3d):
 		super(discriminator3d, self).__init__()
 		self.nInputCh = nInputCh
 
@@ -203,11 +206,11 @@ class discriminator3d(nn.Module):
 		)
 
 		self.convID = nn.Sequential(
-			nn.Conv3d(512, Nid, 4, bias=False),
+			nn.Conv3d(512, num_id, 4, bias=False),
 		)
 
 		self.convPCode = nn.Sequential(
-			nn.Conv3d(512, Npcode, 4, bias=False),
+			nn.Conv3d(512, num_c_expr, 4, bias=False),
 		)
 		utils.initialize_weights(self)
 
@@ -307,14 +310,14 @@ class DRecon3DGAN(object):
 											shape=128, image_shape=256, center=self.centerBosphorus,
 											use_colorPCL=True),
 											batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-			self.Nid = 105
-			self.Npcode = len(self.data_loader.dataset.posecodemap)
-			self.Nz = 50
+			self.num_id = 105
+			self.num_c_expr = len(self.data_loader.dataset.posecodemap)
+			self.dim_fx = 320
 
 		# networks init
-		self.G = generator2d3d(self.Nid, self.Npcode, nOutputCh={'2d':3,'3d':1})
-		self.D2d = discriminator2d(self.Nid, self.Npcode, nInputCh=3)
-		self.D3d = discriminator3d(self.Nid, self.Npcode, nInputCh=1)
+		self.G = generator2d3d(self.dim_fx, self.num_id, self.num_c_expr, nOutputCh={'2d':3,'3d':1})
+		self.D2d = discriminator2d(self.num_id, self.num_c_expr, nInputCh=3)
+		self.D3d = discriminator3d(self.num_id, self.num_c_expr, nInputCh=1)
 		self.G_optimizer = optim.Adam(self.G.parameters(), lr=args.lrG, betas=(args.beta1, args.beta2))
 		self.D2d_optimizer = optim.Adam(self.D2d.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
 		self.D3d_optimizer = optim.Adam(self.D3d.parameters(), lr=args.lrD, betas=(args.beta1, args.beta2))
@@ -402,12 +405,12 @@ class DRecon3DGAN(object):
 
 				projected, _ = torch.max( x3D_[:,1:,:,:,:], 4, keepdim=False)
 				x3D_ = x3D_[:,0:1,:,:,:]
-				y_random_pcode_ = torch.floor(torch.rand(self.batch_size)*self.Npcode).long()
-				y_random_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
+				y_random_pcode_ = torch.floor(torch.rand(self.batch_size)*self.num_c_expr).long()
+				y_random_pcode_onehot_ = torch.zeros( self.batch_size, self.num_c_expr )
 				y_random_pcode_onehot_.scatter_(1, y_random_pcode_.view(-1,1), 1)
 				y_id_ = y_['id']
 				y_pcode_ = y_['pcode']
-				y_pcode_onehot_ = torch.zeros( self.batch_size, self.Npcode )
+				y_pcode_onehot_ = torch.zeros( self.batch_size, self.num_c_expr )
 				y_pcode_onehot_.scatter_(1, y_pcode_.view(-1,1), 1)
 
 				if self.gpu_mode:
@@ -564,7 +567,7 @@ class DRecon3DGAN(object):
 		# reconstruction (inference 2D-to-3D )
 		x3D, y_, x2D = self.get_image_batch()
 		y_ = y_['pcode']
-		y_onehot_ = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot_ = torch.zeros( self.batch_size, self.num_c_expr )
 		y_onehot_.scatter_(1, y_.view(-1,1), 1)
 	
 		x2D_= Variable(x2D.cuda(),volatile=True)
@@ -598,16 +601,16 @@ class DRecon3DGAN(object):
 
 		print( 'fixed input with different expr...')
 		# fixed input with different expr
-		nPcodes = self.Npcode
+		num_c_exprs = self.num_c_expr
 		x2ds = x2D_[0:3,:,:,:]
 		temp_x2ds = torch.split(x2ds,1)
 		x2ds = []
 		for i in range(3):
-			x2ds += temp_x2ds[i:i+1]*nPcodes
+			x2ds += temp_x2ds[i:i+1]*num_c_exprs
 		x2ds = torch.cat(x2ds,0)
-		sample_pcode_onehot = torch.zeros( nPcodes*3, nPcodes )
-		for iS in range( nPcodes*3 ):
-			ii = iS%nPcodes
+		sample_pcode_onehot = torch.zeros( num_c_exprs*3, num_c_exprs )
+		for iS in range( num_c_exprs*3 ):
+			ii = iS%num_c_exprs
 			sample_pcode_onehot[iS,ii] = 1
 		sample_pcode_onehot = Variable( sample_pcode_onehot.cuda(), volatile=True )
 
@@ -620,12 +623,12 @@ class DRecon3DGAN(object):
 			imageio.imwrite(fname, x2D_[i].cpu().data.numpy().transpose(1,2,0))
 
 			fname = os.path.join(save_dir,self.model_name + 'xhat2d_%02d.npy'%(i))
-			xhat2d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+			xhat2d[num_c_exprs*i:num_c_exprs*(i+1)].dump(fname)
 			
 			fname = os.path.join(save_dir,self.model_name + 'xhat3d_%02d.npy'%(i))
-			xhat3d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+			xhat3d[num_c_exprs*i:num_c_exprs*(i+1)].dump(fname)
 
-#			for j in range( nPcodes ):
+#			for j in range( num_c_exprs ):
 #				filename = os.path.join( self.result_dir, self.dataset, self.model_name, 'generate',
 #											self.model_name+'_sample%03d_expr%02d.npy'%(i,j))
 #				np.expand_dims(samples_numpy[j],0).dump( filename )
@@ -691,7 +694,7 @@ class DRecon3DGAN(object):
 		imageio.imwrite(fname, x2D[1].numpy().transpose(1,2,0))
 		
 		y = y['pcode']
-		y_onehot = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot = torch.zeros( self.batch_size, self.num_c_expr )
 		y_onehot.scatter_(1, y.view(-1,1), 1)
 
 		if self.gpu_mode:
@@ -708,7 +711,7 @@ class DRecon3DGAN(object):
 		Gdec3d = self.G.Gdec3d
 
 		fx = Genc( x2D )
-		fx = fx.view(-1,320)
+		fx = fx.view(-1,dim_fx)
 
 		dfx = (fx[1].unsqueeze(0)-fx[0].unsqueeze(0))/n_interp
 
@@ -751,7 +754,7 @@ class DRecon3DGAN(object):
 		imageio.imwrite(fname, x2D[1].numpy().transpose(1,2,0))
 		
 		y = y['pcode']
-		y_onehot = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot = torch.zeros( self.batch_size, self.num_c_expr )
 		y_onehot.scatter_(1, y.view(-1,1), 1)
 
 		if self.gpu_mode:
@@ -803,18 +806,18 @@ class DRecon3DGAN(object):
 			imageio.imwrite(fname, x2D[i].numpy().transpose(1,2,0))
 
 		# fixed input with different expr
-		nPcodes = self.Npcode
+		num_c_exprs = self.num_c_expr
 		x2ds = x2D[0:nSubj,:,:,:]
 		temp_x2ds = torch.split(x2ds,1)
 		x2ds = []
 		for i in range(nSubj):
-			x2ds += temp_x2ds[i:i+1]*nPcodes
+			x2ds += temp_x2ds[i:i+1]*num_c_exprs
 		x2ds = torch.cat(x2ds,0)
 
 		# different expr
-		y_onehot = torch.zeros( nPcodes*nSubj, nPcodes )
-		for iS in range( nPcodes*nSubj ):
-			ii = iS%nPcodes
+		y_onehot = torch.zeros( num_c_exprs*nSubj, num_c_exprs )
+		for iS in range( num_c_exprs*nSubj ):
+			ii = iS%num_c_exprs
 			y_onehot[iS,ii] = 1
 
 		if self.gpu_mode:
@@ -827,7 +830,7 @@ class DRecon3DGAN(object):
 		xhat2d = xhat2d.cpu().data.numpy()
 		xhat3d = xhat3d.cpu().data.numpy()
 		#for i in range( nSubj ):
-		for i in range( nSubj*nPcodes ):
+		for i in range( nSubj*num_c_exprs ):
 			print( 'saving...{}'.format(i))
 			save_dir_i = os.path.join( save_dir, str(i) )
 			if not os.path.exists(save_dir_i):
@@ -835,11 +838,11 @@ class DRecon3DGAN(object):
 
 			fname = os.path.join(save_dir_i,'2d.npy')
 			xhat2d[i:(i+1)].dump(fname)
-			#xhat2d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+			#xhat2d[num_c_exprs*i:num_c_exprs*(i+1)].dump(fname)
 			
 			fname = os.path.join(save_dir_i,'3d.npy')
 			xhat3d[i:(i+1)].dump(fname)
-			#xhat3d[nPcodes*i:nPcodes*(i+1)].dump(fname)
+			#xhat3d[num_c_exprs*i:num_c_exprs*(i+1)].dump(fname)
 
 	def reconstruct(self):
 		print( 'reconstruct()...' )
@@ -855,7 +858,7 @@ class DRecon3DGAN(object):
 		x3D, y, x2D = self.get_image_batch()
 
 		y = y['pcode']
-		y_onehot = torch.zeros( self.batch_size, self.Npcode )
+		y_onehot = torch.zeros( self.batch_size, self.num_c_expr )
 		y_onehot.scatter_(1, y.view(-1,1), 1)
 
 		print( 'saving input...')
