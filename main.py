@@ -23,6 +23,7 @@ from AE3D import AutoEncoder3D
 from DRGAN2D import DRGAN2D 
 from DRecon3DGAN import DRecon3DGAN
 from DRecon2DGAN import DRecon2DGAN
+from DReconVAEGAN import DReconVAEGAN
 
 def str2bool(v):
 	if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -43,7 +44,7 @@ def parse_args():
 									'GAN3D', 'VAEGAN3D', 'DRGAN3D', 'DRGAN2D',
 									'Recog3D','Recog2D',
 									'VAEDRGAN3D', 'DRcycleGAN3D', 'CycleGAN3D',
-									'DRecon3DGAN','DRecon2DGAN',
+									'DRecon3DGAN','DRecon2DGAN', 'DReconVAEGAN',
 									'AE3D'],
 						help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='Bosphorus', 
@@ -71,13 +72,14 @@ def parse_args():
 	parser.add_argument('--fname_cache', type=str, default='', help='filename of cached datalist, ex)cache_Bosphorus.txt')
 	parser.add_argument('--resume', type=str2bool, default=False, help='resume training from saved model')
 	parser.add_argument('--centerBosphorus', type=str2bool, default=True, help='center Bosphorus PCL in voxel space')
-	parser.add_argument('--loss_option', type=str, default='', help='recon,dist,GP')
+	parser.add_argument('--loss_option', type=str, default='', help='recon,dist,GP(omitted)')
 	parser.add_argument('--n_critic', type=int, default=1, help='n_critic')
 	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
 	parser.add_argument('--nDaccAvg', type=int, default=5, help='number of batches for moving averaging D_acc')
 
 	# below arguments are for eval mode
 	parser.add_argument('--eval', type=str, default='', help='generate, interp_id, interp_expr, control_expr')
+	parser.add_argument('--eval_comment', type=str, default='', help='comment for evaluation')
 	parser.add_argument('--is_enc', type=str2bool, default=False, help='make latent variable from input images')
 	parser.add_argument('--n_interp', type=int, default=20, help='number of interpolation points')
 
@@ -187,6 +189,8 @@ def main():
 		gan = DRecon3DGAN(opts)
 	elif opts.gan_type == 'DRecon2DGAN':
 		gan = DRecon2DGAN(opts)
+	elif opts.gan_type == 'DReconVAEGAN':
+		gan = DReconVAEGAN(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
