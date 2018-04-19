@@ -125,7 +125,7 @@ class generator2d3d(nn.Module):
 		xhat2d = self.Gdec2d(fx, y_pcode_onehot_)
 		xhat3d = self.Gdec3d(fx, y_pcode_onehot_)
 
-		return fx, xhat2d, xhat3d
+		return xhat2d, xhat3d
 
 class discriminator2d(nn.Module):
 	# Network Architecture is exactly same as in infoGAN (https://arxiv.org/abs/1606.03657)
