@@ -251,6 +251,27 @@ class Bosphorus( Dataset ):
 		else:
 			return voxel, labels
 
+def load_manual_dataset( path ):
+	
+	images = []
+	fnames_image = next(os.walk( path ))[2]
+	fnames_image = sorted( [f for f in fnames_image if 'png' in f] )
+	image_shape = 256
+	for fname in fnames_image:
+		img_name = os.path.join( path, fname )
+		image = np.array(imageio.imread(img_name)[:,:,:3])/255
+		ratio = float(image_shape)/image.shape[0] 
+		image = scipy.misc.imresize( image, (image_shape,int(ratio*image.shape[0])) )
+		image = image.astype('float64')
+		width = image.shape[1]
+		w = (image_shape-width)//2
+		image = np.pad( image, ((0,0),(w,w+width%2),(0,0)),'constant',constant_values=0 )
+		image = image.transpose(2,0,1)
+		images.append(image)
+	images = np.stack(images,axis=0)
+	images = torch.Tensor(images)
+	return images
+
 class MultiPie( Dataset ):
 	def __init__( self, root_dir, transform=None, cam_ids=None):
 		self.filenames = []
