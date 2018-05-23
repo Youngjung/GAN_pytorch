@@ -960,4 +960,59 @@ class DReconVAEGAN(object):
 
 			filename = os.path.join( GT_dir, indicator+'.npy' )
 			np.expand_dims(x3D[i],0).dump( filename )
+
+	def manual_inference(self, opts):
+		evalcomment = ''
+		if len(opts.eval_comment)>0:
+			evalcomment = '_'+opts.eval_comment
+		session_name = 'manual_inference_'+os.path.basename(opts.eval)+evalcomment
+		print( 'manual_inference()...' )
+		save_dir = os.path.join(self.result_dir, self.dataset, self.model_name, session_name )
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
 		
+		self.G.eval()
+
+		x2ds = utils.load_manual_dataset( os.path.join(opts.dataroot_dir,opts.eval) )
+
+		# fixed input with different expr
+		num_c_exprs = self.num_c_expr
+		nSubj = x2ds.shape[0]
+
+		temp_x2ds = torch.split(x2ds,1)
+		x2ds = []
+		for i in range(nSubj):
+			x2ds += temp_x2ds[i:i+1]*num_c_exprs
+		x2ds = torch.cat(x2ds,0)
+
+		# different expr
+		y_onehot = torch.zeros( num_c_exprs*nSubj, num_c_exprs )
+		for iS in range( num_c_exprs*nSubj ):
+			ii = iS%num_c_exprs
+			y_onehot[iS,ii] = 1
+
+		reparamZ = torch.normal( torch.zeros(num_c_exprs*nSubj, self.dim_fx),
+									torch.ones(num_c_exprs*nSubj,self.dim_fx) )
+
+		if self.gpu_mode:
+			reparamZ = Variable(reparamZ.cuda())
+			self.G = self.G.cuda()
+			x2ds = Variable(x2ds.cuda(),volatile=True)
+			y_onehot = Variable( y_onehot.cuda(), volatile=True )
+
+		xhat2d, xhat3d, _, _ = self.G(x2ds, y_onehot, reparamZ )
+	
+		xhat2d = xhat2d.cpu().data.numpy()
+		xhat3d = xhat3d.cpu().data.numpy()
+		print( 'saving recon...')
+		for i in range( nSubj*num_c_exprs ):
+			print( 'saving...{}'.format(i))
+			save_dir_i = os.path.join( save_dir, str(i) )
+			if not os.path.exists(save_dir_i):
+				os.makedirs(save_dir_i)
+
+			fname = os.path.join(save_dir_i,'2d.npy')
+			xhat2d[i:(i+1)].dump(fname)
+			
+			fname = os.path.join(save_dir_i,'3d.npy')
+			xhat3d[i:(i+1)].dump(fname)
